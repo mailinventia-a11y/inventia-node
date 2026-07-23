@@ -58,8 +58,135 @@ let staff = [
   { id: 2, username: 'vivin', full_name: 'Vivin', email: 'test@inventia.com', role: 'manager', status: 1 }
 ];
 
-// Initialize UI
-document.addEventListener('DOMContentLoaded', () => {
+// Intercept all API fetches to inject the auth token and role headers dynamically
+const originalFetch = window.fetch;
+window.fetch = function (url, options = {}) {
+  const cleanUrl = typeof url === 'string' ? url : (url.url || '');
+  if (cleanUrl.startsWith('/api/') && !cleanUrl.includes('/api/auth/login')) {
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    const userId = localStorage.getItem('userId');
+
+    if (token) {
+      options.headers = options.headers || {};
+      if (options.headers instanceof Headers) {
+        options.headers.set('Authorization', `Bearer ${token}`);
+        if (role) options.headers.set('x-user-role', role);
+        if (userId) options.headers.set('x-user-id', userId);
+      } else {
+        options.headers = {
+          ...options.headers,
+          'Authorization': `Bearer ${token}`,
+          'x-user-role': role,
+          'x-user-id': userId
+        };
+      }
+    }
+  }
+  return originalFetch(url, options);
+};
+
+// Auth and Session Helper Functions
+function getAuthHeaders(extraHeaders = {}) {
+  const token = localStorage.getItem('token') || 'mock-token';
+  const role = localStorage.getItem('role') || 'admin';
+  const userId = localStorage.getItem('userId') || '1';
+  return {
+    'Authorization': `Bearer ${token}`,
+    'x-user-role': role,
+    'x-user-id': userId,
+    'Content-Type': 'application/json',
+    ...extraHeaders
+  };
+}
+
+function updateProfileUI() {
+  const name = localStorage.getItem('fullName') || 'Admin';
+  const role = localStorage.getItem('role') || 'Admin';
+  
+  // Update Header Profile
+  const profileNameEl = document.querySelector('.profile-name');
+  const profileRoleEl = document.querySelector('.profile-role');
+  const profileAvatarEl = document.querySelector('.profile-avatar');
+  if (profileNameEl) profileNameEl.innerText = name;
+  if (profileRoleEl) profileRoleEl.innerText = role.charAt(0).toUpperCase() + role.slice(1);
+  if (profileAvatarEl && name) profileAvatarEl.innerText = name.charAt(0).toUpperCase();
+
+  // Update Welcome text in Dashboard
+  const welcomeEl = document.querySelector('.dashboard-welcome');
+  if (welcomeEl) {
+    const timeSpan = document.getElementById('liveTimestamp');
+    welcomeEl.innerHTML = `Welcome back, ${name}! | <span id="liveTimestamp">${timeSpan ? timeSpan.innerHTML : ''}</span>`;
+  }
+}
+
+async function handleLoginSubmit(event) {
+  event.preventDefault();
+  const usernameEl = document.getElementById('loginUsername');
+  const passwordEl = document.getElementById('loginPassword');
+  const errorEl = document.getElementById('loginErrorMessage');
+  
+  if (!usernameEl || !passwordEl) return;
+  
+  const username = usernameEl.value.trim();
+  const password = passwordEl.value;
+  
+  if (errorEl) {
+    errorEl.style.display = 'none';
+    errorEl.innerText = '';
+  }
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Invalid username or password.');
+    }
+
+    // Save session
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('userId', data.user.id);
+    localStorage.setItem('username', data.user.username);
+    localStorage.setItem('fullName', data.user.full_name);
+    localStorage.setItem('role', data.user.role);
+
+    // Hide Login container
+    const loginContainer = document.getElementById('loginContainer');
+    if (loginContainer) loginContainer.style.display = 'none';
+
+    // Clear login inputs
+    usernameEl.value = '';
+    passwordEl.value = '';
+
+    // Update Profile and Initialize POS App
+    updateProfileUI();
+    initializePOSApp();
+  } catch (err) {
+    console.error('Login error:', err);
+    if (errorEl) {
+      errorEl.innerText = err.message || 'Login failed. Please try again.';
+      errorEl.style.display = 'block';
+    }
+  }
+}
+
+function logout() {
+  localStorage.clear();
+  
+  // Show Login Overlay
+  const loginContainer = document.getElementById('loginContainer');
+  if (loginContainer) loginContainer.style.display = 'flex';
+  
+  // Reset active panel to dashboard
+  currentTab = 'dashboard';
+}
+
+function initializePOSApp() {
   setupNavigation();
   loadDashboardData();
   loadPOSCatalog();
@@ -87,6 +214,26 @@ document.addEventListener('DOMContentLoaded', () => {
     .catch(e => {
       console.log('Running in local browser simulator mode. Set up Supabase credentials in .env to use live DB.');
     });
+}
+
+// Initialize UI
+document.addEventListener('DOMContentLoaded', () => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    // Hide login screen
+    const loginContainer = document.getElementById('loginContainer');
+    if (loginContainer) loginContainer.style.display = 'none';
+    
+    // Update profile info
+    updateProfileUI();
+    
+    // Run normal initialization
+    initializePOSApp();
+  } else {
+    // Show login screen
+    const loginContainer = document.getElementById('loginContainer');
+    if (loginContainer) loginContainer.style.display = 'flex';
+  }
 });
 
 

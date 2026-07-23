@@ -97,7 +97,7 @@
       <button class="nav-btn" data-tab="backup-tab">
         <i class="fa-solid fa-database"></i> Backup & Restore
       </button>
-      <button class="nav-btn logout-btn" onclick="alert('Session logged out.')">
+      <button class="nav-btn logout-btn" onclick="logout()">
         <i class="fa-solid fa-right-from-bracket"></i> Logout
       </button>
     </nav>
@@ -138,7 +138,7 @@
             <span class="profile-role">Admin</span>
           </div>
         </div>
-        <button class="header-logout-btn" onclick="alert('Logged out')">
+        <button class="header-logout-btn" onclick="logout()">
           <i class="fa-solid fa-right-from-bracket"></i> Logout
         </button>
       </div>
@@ -1856,6 +1856,37 @@
 
   <!-- JsBarcode Script -->
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+  
+  <!-- Full-Screen Login Overlay -->
+  <div id="loginContainer" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg); display: none; align-items: center; justify-content: center; z-index: 9999; padding: 20px; font-family: var(--font);">
+    <div style="background: var(--bg-card); width: 100%; max-width: 420px; padding: 36px 32px; border-radius: var(--radius-lg); box-shadow: var(--shadow-xl); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 24px;">
+      <div style="text-align: center;">
+        <div style="width: 56px; height: 56px; background: var(--blue-600); border-radius: var(--radius-md); display: grid; place-items: center; color: white; font-size: 1.45rem; margin: 0 auto 16px;">
+          <i class="fa-solid fa-cash-register"></i>
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: var(--ink); margin-bottom: 6px;">POS Inventia</h2>
+        <p style="font-size: 0.84rem; color: var(--ink-muted);">Please sign in to access your dashboard</p>
+      </div>
+      <form id="loginForm" onsubmit="handleLoginSubmit(event)" style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.8rem; font-weight: 700; color: var(--ink-secondary);">Username</label>
+          <input type="text" id="loginUsername" placeholder="e.g. admin" required style="width: 100%; padding: 11px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 0.88rem; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='var(--blue-600)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.8rem; font-weight: 700; color: var(--ink-secondary);">Password</label>
+          <input type="password" id="loginPassword" placeholder="••••••••" required style="width: 100%; padding: 11px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 0.88rem; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='var(--blue-600)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        
+        <!-- Error message display -->
+        <div id="loginErrorMessage" style="display: none; font-size: 0.8rem; color: var(--red-600); font-weight: 600; text-align: center; background: var(--red-50); border: 1px solid var(--red-100); padding: 8px; border-radius: var(--radius-sm);"></div>
+        
+        <button type="submit" style="width: 100%; padding: 12px; background-color: var(--blue-600); color: white; border: none; border-radius: var(--radius-sm); font-weight: 700; cursor: pointer; font-size: 0.9rem; transition: background-color var(--transition); display: flex; align-items: center; justify-content: center; gap: 8px;" onmouseover="this.style.backgroundColor='var(--blue-700)'" onmouseout="this.style.backgroundColor='var(--blue-600)'">
+          <i class="fa-solid fa-right-to-bracket"></i> Sign In
+        </button>
+      </form>
+    </div>
+  </div>
+
   <!-- JavaScript File -->
   <script src="app.js?v=2.1"></script>
 </body>
