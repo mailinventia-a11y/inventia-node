@@ -1,4 +1,3 @@
-import sqlite3 from 'sqlite3';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -21,6 +20,9 @@ if (isSupabaseConfigured()) {
 } else {
   console.log('📂 No valid Supabase credentials found. Initializing local SQLite fallback database...');
   
+  // Dynamic import to prevent native binary loading crashes on Vercel
+  const sqlite3 = (await import('sqlite3')).default;
+
   // Vercel serverless has a read-only filesystem. Use in-memory SQLite ':memory:' on Vercel to avoid crashes.
   const dbPath = process.env.VERCEL ? ':memory:' : path.join(process.cwd(), 'pos.db');
   sqliteDb = new sqlite3.Database(dbPath);
