@@ -1,0 +1,1862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>POS Inventia - Modern Point of Sale & Inventory Management</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Razorpay Checkout SDK -->
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  
+  <!-- Sidebar Navigation -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-wrapper">
+        <i class="fa-solid fa-cash-register logo-icon"></i>
+      </div>
+      <div>
+        <h1 class="logo-title">Inventia</h1>
+        <span class="logo-subtitle">Point of Sale</span>
+      </div>
+    </div>
+    
+    <nav class="nav-menu">
+      <button class="nav-btn active" data-tab="dashboard">
+        <i class="fa-solid fa-gauge-high"></i> Dashboard
+        <span class="nav-badge new">New</span>
+      </button>
+      <button class="nav-btn" data-tab="pos">
+        <i class="fa-solid fa-cart-shopping"></i> Point of Sale
+        <span class="nav-badge hot">Hot</span>
+      </button>
+      <button class="nav-btn" data-tab="sales-page">
+        <i class="fa-solid fa-list-check"></i> Sales Page
+      </button>
+      <!-- Products Dropdown -->
+      <div class="nav-dropdown-wrapper" id="dropdownProducts">
+        <button class="nav-btn nav-dropdown-trigger">
+          <i class="fa-solid fa-box-archive"></i> Products <i class="fa-solid fa-chevron-down caret"></i>
+        </button>
+        <div class="nav-dropdown-content">
+          <button class="nav-dropdown-item" data-tab="inventory">
+            <i class="fa-solid fa-boxes-stacked"></i> Products List
+          </button>
+          <button class="nav-dropdown-item" data-tab="brands-categories">
+            <i class="fa-solid fa-tags"></i> Categories & Brands
+          </button>
+          <button class="nav-dropdown-item" data-tab="warehouses-locations">
+            <i class="fa-solid fa-warehouse"></i> Warehouse & Locations
+          </button>
+        </div>
+      </div>
+
+      <button class="nav-btn" data-tab="customers">
+        <i class="fa-solid fa-users"></i> Customers
+      </button>
+
+      <button class="nav-btn" data-tab="transfers">
+        <i class="fa-solid fa-boxes-stacked"></i> Inventory
+        <span class="nav-badge count">1</span>
+      </button>
+
+      <!-- Reports Dropdown -->
+      <div class="nav-dropdown-wrapper" id="dropdownReports">
+        <button class="nav-btn nav-dropdown-trigger">
+          <i class="fa-solid fa-chart-pie"></i> Reports <i class="fa-solid fa-chevron-down caret"></i>
+        </button>
+        <div class="nav-dropdown-content">
+          <button class="nav-dropdown-item" data-tab="reports" data-report-type="sales">
+            <i class="fa-solid fa-chart-line"></i> Sales Report
+          </button>
+          <button class="nav-dropdown-item" data-tab="reports" data-report-type="stock">
+            <i class="fa-solid fa-warehouse"></i> Inventory Report
+          </button>
+          <button class="nav-dropdown-item" data-tab="reports" data-report-type="cust">
+            <i class="fa-solid fa-users"></i> Customers Report
+          </button>
+        </div>
+      </div>
+
+      <button class="nav-btn" data-tab="staff">
+        <i class="fa-solid fa-user-gear"></i> User Management
+      </button>
+      <button class="nav-btn" data-tab="settings-tab">
+        <i class="fa-solid fa-gear"></i> Billing Settings
+      </button>
+      <button class="nav-btn" data-tab="backup-tab">
+        <i class="fa-solid fa-database"></i> Backup & Restore
+      </button>
+      <button class="nav-btn logout-btn" onclick="alert('Session logged out.')">
+        <i class="fa-solid fa-right-from-bracket"></i> Logout
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="status-indicator">
+        <span class="dot green"></span>
+        <span>Online</span>
+      </div>
+      <div class="version-tag">
+        <span>v1.0.0</span>
+        <span><i class="fa-solid fa-shield-halved"></i> Secure</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Container -->
+  <main class="main-content">
+    
+    <!-- Top Header Bar -->
+    <header class="header-bar">
+      <div class="header-brand">
+        <span class="brand-pill">POS</span>
+        <span class="brand-name">Inventia</span>
+      </div>
+      <div class="header-actions">
+        <div class="calculator-trigger" onclick="toggleCalculatorModal()">
+          <i class="fa-solid fa-calculator"></i> Area Calculator
+        </div>
+        <span class="notification-bell">
+          <i class="fa-solid fa-bell"></i>
+          <span class="badge">1</span>
+        </span>
+        <div class="header-profile">
+          <div class="profile-avatar">A</div>
+          <div class="profile-info">
+            <span class="profile-name">Admin</span>
+            <span class="profile-role">Admin</span>
+          </div>
+        </div>
+        <button class="header-logout-btn" onclick="alert('Logged out')">
+          <i class="fa-solid fa-right-from-bracket"></i> Logout
+        </button>
+      </div>
+    </header>
+
+    <!-- TAB 1: Dashboard Analytics -->
+    <section id="dashboard" class="tab-panel active">
+      <div class="dashboard-header">
+        <div>
+          <h2><i class="fa-solid fa-gauge-high"></i> Dashboard Overview</h2>
+        </div>
+        <div class="dashboard-welcome">
+          Welcome back, Admin! | <span id="liveTimestamp">Tuesday, July 21, 2026 09:52:04 PM</span>
+        </div>
+      </div>
+
+      <!-- KPI Summary Cards -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <div class="kpi-icon-wrapper sales-icon">
+              <i class="fa-solid fa-cart-shopping"></i>
+            </div>
+            <div class="kpi-title-block">
+              <span class="kpi-label">Today's Sales</span>
+              <span class="badge-live">Live ⚡</span>
+            </div>
+          </div>
+          <h3 class="kpi-value" id="kpiSales">2</h3>
+          <span class="kpi-subtext">Completed Transactions</span>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <div class="kpi-icon-wrapper revenue-icon">
+              <i class="fa-solid fa-dollar-sign"></i>
+            </div>
+            <div class="kpi-title-block">
+              <span class="kpi-label">Today's Revenue</span>
+              <span class="badge-live">Live ⚡</span>
+            </div>
+          </div>
+          <h3 class="kpi-value" id="kpiRevenue">$80.00</h3>
+          <span class="kpi-subtext">Total Revenue</span>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <div class="kpi-icon-wrapper alert-icon">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div class="kpi-title-block">
+              <span class="kpi-label">Low Stock</span>
+              <span class="badge-alert">Alert 🔔</span>
+            </div>
+          </div>
+          <h3 class="kpi-value text-alert" id="kpiLowStock">1</h3>
+          <span class="kpi-subtext">Products Need Restocking</span>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <div class="kpi-icon-wrapper customer-icon">
+              <i class="fa-solid fa-users"></i>
+            </div>
+            <div class="kpi-title-block">
+              <span class="kpi-label">Total Customers</span>
+              <span class="badge-live">Live ⚡</span>
+            </div>
+          </div>
+          <h3 class="kpi-value" id="kpiCustomers">1</h3>
+          <span class="kpi-subtext">Registered Customers</span>
+        </div>
+      </div>
+
+      <!-- Charts Row 1: Overall Information & Weekly Sales -->
+      <div class="split-grid-charts" style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; margin-bottom: 24px;">
+        <div class="grid-panel">
+          <div class="panel-header">
+            <h4><i class="fa-solid fa-circle-info" style="color: var(--primary);"></i> Overall Information</h4>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 15px;">
+            <div class="stat-mini-card">
+              <i class="fa-solid fa-users" style="color:#6366f1; background:#eef2ff; padding:8px; border-radius:8px; margin-bottom:6px;"></i>
+              <span style="display:block; font-size:0.75rem; color:var(--text-muted);">Customers</span>
+              <strong id="dashboardCustomerCount" style="font-size:1.5rem; font-weight:800;">1</strong>
+              <div style="height:35px; margin-top:6px;"><canvas id="sparkCustomers"></canvas></div>
+            </div>
+            <div class="stat-mini-card">
+              <i class="fa-solid fa-cart-shopping" style="color:#a855f7; background:#f3e8ff; padding:8px; border-radius:8px; margin-bottom:6px;"></i>
+              <span style="display:block; font-size:0.75rem; color:var(--text-muted);">Orders</span>
+              <strong id="dashboardOrderCount" style="font-size:1.5rem; font-weight:800;">2</strong>
+              <div style="height:35px; margin-top:6px;"><canvas id="sparkOrders"></canvas></div>
+            </div>
+            <div class="stat-mini-card">
+              <i class="fa-solid fa-box" style="color:#3b82f6; background:#dbeafe; padding:8px; border-radius:8px; margin-bottom:6px;"></i>
+              <span style="display:block; font-size:0.75rem; color:var(--text-muted);">Products</span>
+              <strong id="dashboardProductCount" style="font-size:1.5rem; font-weight:800;">10</strong>
+              <div style="height:35px; margin-top:6px;"><canvas id="sparkProducts"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-panel">
+          <div class="panel-header">
+            <h4><i class="fa-solid fa-chart-line" style="color: var(--primary);"></i> Weekly Sales Performance</h4>
+          </div>
+          <div style="height: 220px; margin-top: 10px;">
+            <canvas id="weeklySalesChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts Row 2: Top Products & Payment Methods -->
+      <div class="split-grid-charts" style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; margin-bottom: 24px;">
+        <div class="grid-panel">
+          <div class="panel-header">
+            <h4><i class="fa-solid fa-trophy" style="color: #f59e0b;"></i> Top Products (7 Days)</h4>
+          </div>
+          <div style="height: 200px; margin-top: 10px;">
+            <canvas id="topProductsChart"></canvas>
+          </div>
+        </div>
+
+        <div class="grid-panel">
+          <div class="panel-header">
+            <h4><i class="fa-solid fa-chart-pie" style="color: var(--primary);"></i> Payment Methods (7 Days)</h4>
+          </div>
+          <div style="height: 200px; margin-top: 10px;">
+            <canvas id="paymentMethodsChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Content Split Tables: Best Selling & Low Stock -->
+      <div class="split-grid" style="margin-bottom: 24px;">
+        <div class="grid-panel">
+          <div class="panel-header">
+            <h4><i class="fa-solid fa-clock-rotate-left"></i> Best Selling Products</h4>
+            <select style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.8rem;"><option>Today</option></select>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Price</th>
+                  <th>Total Sales</th>
+                  <th>Growth</th>
+                </tr>
+              </thead>
+              <tbody id="bestSellingTable">
+                <tr>
+                  <td style="display:flex; align-items:center; gap:10px;">
+                    <img src="https://images.unsplash.com/photo-1617576683096-00fc8eecb3af?w=100" style="width:36px; height:36px; border-radius:6px; object-fit:cover;">
+                    <strong>Gardening Tools Set</strong>
+                  </td>
+                  <td>$59.99</td>
+                  <td>1</td>
+                  <td><span class="badge-growth">↑ 100%</span></td>
+                </tr>
+                <tr>
+                  <td style="display:flex; align-items:center; gap:10px;">
+                    <img src="https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=100" style="width:36px; height:36px; border-radius:6px; object-fit:cover;">
+                    <strong>Coffee Beans</strong>
+                  </td>
+                  <td>$12.99</td>
+                  <td>1</td>
+                  <td><span class="badge-growth">↑ 100%</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="grid-panel">
+          <div class="panel-header">
+            <h4><i class="fa-solid fa-boxes-stacked"></i> Low Stock Products</h4>
+            <span style="color:var(--primary); font-weight:700; font-size:0.85rem; cursor:pointer;" onclick="switchTab('inventory')">View All</span>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Product ID</th>
+                  <th>Stock Qty</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="lowStockTable">
+                <tr>
+                  <td style="display:flex; align-items:center; gap:10px;">
+                    <img src="https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=100" style="width:36px; height:36px; border-radius:6px; object-fit:cover;">
+                    <strong>Coffee Beans</strong>
+                  </td>
+                  <td>#6</td>
+                  <td>3</td>
+                  <td><span class="stock-pill low">In Stock</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions Grid Panel -->
+      <div class="grid-panel" style="margin-bottom: 30px;">
+        <div class="panel-header">
+          <h4><i class="fa-solid fa-bolt" style="color:#eab308;"></i> Quick Actions</h4>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 12px;">
+          <button class="action-btn primary" onclick="switchTab('pos')" style="padding:14px; font-weight:700;"><i class="fa-solid fa-plus"></i> New Sale</button>
+          <button class="action-btn secondary" onclick="switchTab('inventory')" style="padding:14px; font-weight:700; background-color:#1e293b; color:white;"><i class="fa-solid fa-boxes-stacked"></i> Manage Products</button>
+          <button class="action-btn secondary" onclick="switchTab('customers')" style="padding:14px; font-weight:700; background-color:#7c3aed; color:white;"><i class="fa-solid fa-users"></i> Manage Customers</button>
+          <button class="action-btn secondary" onclick="switchTab('transfers')" style="padding:14px; font-weight:700; background-color:#d97706; color:white;"><i class="fa-solid fa-warehouse"></i> Check Inventory</button>
+          <button class="action-btn secondary" onclick="switchTab('reports')" style="padding:14px; font-weight:700; background-color:#0284c7; color:white;"><i class="fa-solid fa-chart-pie"></i> View Reports</button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 2: POS Checkout Terminal -->
+    <section id="pos" class="tab-panel">
+      <div class="pos-layout">
+        
+        <!-- POS Product Catalog -->
+        <div class="pos-catalog">
+          <!-- Search & Barcode Scan Bar -->
+          <div class="pos-search-bar" style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <input type="text" id="posSearchInput" placeholder="Search products by name or barcode..." style="flex-grow: 1; padding: 12px 16px; border-radius: var(--radius-md); border: 1px solid var(--border-color); font-family: var(--font-family);" onkeyup="handlePOSSearch(this.value)">
+            <button class="action-btn primary" onclick="openScannerModal()" style="padding: 12px 24px; display: flex; align-items: center; gap: 8px; font-weight: 700;">
+              <i class="fa-solid fa-barcode"></i> Scan
+            </button>
+          </div>
+
+          <div class="catalog-filters">
+            <button class="filter-btn active" data-cat="all">All Products</button>
+            <button class="filter-btn" data-cat="tiles">Tiles & Marble</button>
+            <button class="filter-btn" data-cat="lighting">Lighting</button>
+            <button class="filter-btn" data-cat="furniture">Furniture</button>
+            <button class="filter-btn" data-cat="food">Food & Beverages</button>
+            <button class="filter-btn" data-cat="clothing">Clothing</button>
+            <button class="filter-btn" data-cat="electronics">Electronics</button>
+          </div>
+
+          <div class="pos-product-grid" id="posProductGrid">
+            <!-- Products Loaded Dynamically -->
+          </div>
+        </div>
+
+        <!-- POS Cart & Checkout Panel -->
+        <div class="pos-cart-panel">
+          <div class="cart-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <i class="fa-solid fa-cart-shopping" style="font-size: 1.25rem; color: var(--primary);"></i>
+              <h4 style="font-size: 1.1rem; font-weight: 700;">Current Sale</h4>
+            </div>
+            <span id="cartItemCount" class="badge" style="background-color: var(--primary-light); color: var(--primary); padding: 4px 10px; border-radius: 20px; font-weight: 700; font-size: 0.8rem;">0 items</span>
+          </div>
+          
+          <div class="cart-customer-section" style="margin-bottom: 16px;">
+            <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 6px;">Customer:</label>
+            <div style="margin-bottom: 10px; position: relative;">
+              <div style="position: relative;">
+                <input type="text" id="cartCustomerSearchInput" placeholder="Search customer by name, phone, email..." style="width: 100%; padding: 10px 36px 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-family: var(--font); font-size: 0.85rem; outline: none; box-sizing: border-box;" onkeyup="filterCustomerDropdown(this.value)" onfocus="filterCustomerDropdown(this.value)">
+                <i class="fa-solid fa-magnifying-glass" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-muted); font-size: 0.85rem; pointer-events: none;"></i>
+              </div>
+              <input type="hidden" id="cartCustomerSelect" value="">
+              
+              <!-- Customer Search Auto-complete Results List -->
+              <div id="customerSearchResultsList" style="display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 220px; overflow-y: auto; background: #ffffff; border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); z-index: 120; margin-top: 4px;">
+                <!-- Populated dynamically via filterCustomerDropdown() -->
+              </div>
+            </div>
+            <button class="action-btn secondary" onclick="openCustomerModal()" style="width: 100%; padding: 8px; font-size: 0.85rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <i class="fa-solid fa-user-plus"></i> + New Customer
+            </button>
+            <div style="margin-top: 10px;">
+              <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">Fulfillment Location:</label>
+              <select id="cartWarehouseSelect" style="width: 100%; padding: 8px; margin-top: 4px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-family: var(--font-family);">
+                <option value="1">Main Warehouse</option>
+                <option value="2">City Showroom</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Cart Header Titles -->
+          <div class="cart-table-header" style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 40px; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; padding: 8px 0; border-bottom: 2px solid var(--border-color);">
+            <span>Product</span>
+            <span style="text-align: right;">Price</span>
+            <span style="text-align: center;">Qty</span>
+            <span style="text-align: right;">Total</span>
+            <span></span>
+          </div>
+
+          <div class="cart-items-list" id="cartItemsList" style="min-height: 220px; max-height: 380px; overflow-y: auto; margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px; background: #ffffff;">
+            <!-- Empty Cart Placeholder -->
+            <div class="empty-cart-placeholder" style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
+              <i class="fa-solid fa-cart-flatbed" style="font-size: 3rem; margin-bottom: 12px; opacity: 0.4;"></i>
+              <p style="font-weight: 600; font-size: 0.95rem;">Your cart is empty</p>
+            </div>
+          </div>
+
+          <div class="cart-totals">
+            <div class="total-row">
+              <span>Subtotal:</span>
+              <span id="cartSubtotal">$0.00</span>
+            </div>
+            <div class="total-row">
+              <span>Discount ($):</span>
+              <input type="number" id="cartDiscount" value="0" min="0" oninput="recalculateCart()" style="width: 80px; text-align: right; padding: 4px; border-radius: 4px; border: 1px solid var(--border-color);">
+            </div>
+            <div class="total-row">
+              <span>Tax (10%):</span>
+              <span id="cartTax">$0.00</span>
+            </div>
+            <hr class="totals-divider" style="margin: 8px 0;">
+            <div class="total-row grand-total" style="font-size: 1.2rem; font-weight: 800;">
+              <span>Total:</span>
+              <span id="cartGrandTotal">$0.00</span>
+            </div>
+          </div>
+
+          <div class="cart-payment-methods" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 16px 0;">
+            <label class="pay-method-card">
+              <input type="radio" name="payment_method" value="cash" checked>
+              <div class="pay-card-content">Cash</div>
+            </label>
+            <label class="pay-method-card">
+              <input type="radio" name="payment_method" value="card">
+              <div class="pay-card-content">Card</div>
+            </label>
+            <label class="pay-method-card">
+              <input type="radio" name="payment_method" value="upi">
+              <div class="pay-card-content">UPI</div>
+            </label>
+            <label class="pay-method-card">
+              <input type="radio" name="payment_method" value="razorpay">
+              <div class="pay-card-content" style="color: #0284c7; font-weight: 700;"><i class="fa-solid fa-bolt" style="font-size: 0.75rem;"></i> Razorpay</div>
+            </label>
+          </div>
+
+          <div style="display: flex; gap: 10px;">
+            <button class="action-btn secondary" onclick="clearCart()" style="flex: 1; padding: 12px; font-weight: 700;">
+              <i class="fa-solid fa-trash-can"></i> Clear Cart
+            </button>
+            <button class="checkout-btn" onclick="submitPOSCheckout()" style="flex: 2; padding: 12px; font-weight: 700;">
+              <i class="fa-solid fa-circle-check"></i> Complete Sale
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 3: Inventory & Warehouse Management -->
+    <section id="inventory" class="tab-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Product Master List & Stock Control</h2>
+          <p>Create new products, specifications, and inward stock adjustments</p>
+        </div>
+        <div class="panel-actions">
+          <button class="action-btn primary" onclick="openProductModal()">
+            <i class="fa-solid fa-plus"></i> Add New Product
+          </button>
+          <button class="action-btn secondary" onclick="openStockInwardModal()">
+            <i class="fa-solid fa-arrow-down-long"></i> Stock Inward / Adjust
+          </button>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <table class="inventory-table">
+          <thead>
+            <tr>
+              <th>SKU / Name</th>
+              <th>Brand</th>
+              <th>Category</th>
+              <th>Spec (Finish/Material)</th>
+              <th>Lot No</th>
+              <th>Pricing (Cost / Sell)</th>
+              <th>Stock Status</th>
+            </tr>
+          </thead>
+          <tbody id="inventoryListTable">
+            <!-- Dynamic Items -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 4: Stock Transfers -->
+    <section id="transfers" class="tab-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Stock Transfers Between Warehouses</h2>
+          <p>Manage and log transit inventory stock transfers</p>
+        </div>
+        <button class="action-btn primary" onclick="openTransferModal()">
+          <i class="fa-solid fa-truck-moving"></i> Request Stock Transfer
+        </button>
+      </div>
+
+      <div class="split-grid">
+        <!-- Stock transfer request form -->
+        <div class="grid-panel">
+          <h4>Transfer Form</h4>
+          <form id="transferForm" class="panel-form" onsubmit="submitStockTransfer(event)">
+            <div class="form-group">
+              <label>Product</label>
+              <select id="transferProductSelect" required></select>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>From Warehouse</label>
+                <select id="transferFromSelect" required></select>
+              </div>
+              <div class="form-group">
+                <label>To Warehouse</label>
+                <select id="transferToSelect" required></select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Quantity to Transfer</label>
+              <input type="number" id="transferQty" min="1" required>
+            </div>
+            <button type="submit" class="submit-form-btn">Initiate Transfer</button>
+          </form>
+        </div>
+
+        <!-- Transfer Logs table -->
+        <div class="grid-panel">
+          <h4>Transfer Log History</h4>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Route</th>
+                  <th>Qty</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="transferLogTable">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: Customer Ledger & Credit Profiles -->
+    <section id="customers" class="tab-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Customer Account Ledgers</h2>
+          <p>Monitor credit accounts, limits, outstanding balances, and loyalty status</p>
+        </div>
+        <button class="action-btn primary" onclick="openCustomerModal()">
+          <i class="fa-solid fa-user-plus"></i> Add New Customer
+        </button>
+      </div>
+
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Customer Name</th>
+              <th>Contact Info</th>
+              <th>Credit Limit</th>
+              <th>Current Balance Owed</th>
+              <th>Loyalty Level</th>
+              <th>Loyalty Points</th>
+            </tr>
+          </thead>
+          <tbody id="customerLedgerTable">
+            <!-- Dynamic Ledgers -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 6: Brands & Categories Manager -->
+    <section id="brands-categories" class="tab-panel">
+      <!-- Sub-Tabs Navigation -->
+      <div class="sub-tabs-wrapper" style="display: flex; gap: 15px; border-bottom: 2px solid var(--border); margin-bottom: 24px; padding-bottom: 2px;">
+        <button class="sub-tab active" data-sub-tab="categories-manager" onclick="switchSubTab('categories-manager')" style="background: none; border: none; border-bottom: 3px solid var(--blue-600); padding: 12px 24px; font-weight: 700; color: var(--blue-600); cursor: pointer; transition: all var(--transition);">
+          <i class="fa-solid fa-tags"></i> Product Categories
+        </button>
+        <button class="sub-tab" data-sub-tab="brands-manager" onclick="switchSubTab('brands-manager')" style="background: none; border: none; border-bottom: 3px solid transparent; padding: 12px 24px; font-weight: 600; color: var(--ink-secondary); cursor: pointer; transition: all var(--transition);">
+          <i class="fa-solid fa-copyright"></i> Brands Management
+        </button>
+      </div>
+
+      <!-- Sub-Tab 1: Categories Manager -->
+      <div id="categories-manager" class="sub-tab-panel active">
+        <div class="panel-header">
+          <div>
+            <h2>Category Management</h2>
+            <p>Manage structure and product grouping</p>
+          </div>
+          <div class="panel-actions">
+            <button class="action-btn primary" onclick="openAddCategoryModal()">
+              <i class="fa-solid fa-plus"></i> Add New Category
+            </button>
+          </div>
+        </div>
+
+        <!-- KPI Summary Cards for Categories -->
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper customer-icon">
+                <i class="fa-solid fa-tags"></i>
+              </div>
+              <span class="kpi-label">Total Categories</span>
+            </div>
+            <h3 class="kpi-value" id="statsTotalCategories">5</h3>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper revenue-icon">
+                <i class="fa-solid fa-box-open"></i>
+              </div>
+              <span class="kpi-label">Categories With Products</span>
+            </div>
+            <h3 class="kpi-value" id="statsActiveCategories">5</h3>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper sales-icon">
+                <i class="fa-solid fa-boxes-stacked"></i>
+              </div>
+              <span class="kpi-label">Products Assigned</span>
+            </div>
+            <h3 class="kpi-value" id="statsProductsAssigned">10</h3>
+          </div>
+        </div>
+
+        <!-- Categories Card Grid -->
+        <div class="category-grid" id="categoryGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-top: 24px;">
+          <!-- Dynamic Cards generated via loadCategoryManagement() -->
+        </div>
+      </div>
+
+      <!-- Sub-Tab 2: Brands Manager -->
+      <div id="brands-manager" class="sub-tab-panel" style="display: none;">
+        <div class="panel-header">
+          <div>
+            <h2>Brand Directory & Brands Management</h2>
+            <p>Define product manufacturers and brand codes</p>
+          </div>
+          <div class="panel-actions">
+            <button class="action-btn primary" onclick="openAddBrandModal()">
+              <i class="fa-solid fa-plus"></i> Add New Brand
+            </button>
+          </div>
+        </div>
+
+        <!-- KPI Summary Cards for Brands -->
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper customer-icon">
+                <i class="fa-solid fa-copyright"></i>
+              </div>
+              <span class="kpi-label">Total Brands</span>
+            </div>
+            <h3 class="kpi-value" id="statsTotalBrands">4</h3>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper sales-icon">
+                <i class="fa-solid fa-boxes-stacked"></i>
+              </div>
+              <span class="kpi-label">Active Brands in Stock</span>
+            </div>
+            <h3 class="kpi-value" id="statsActiveBrands">4</h3>
+          </div>
+        </div>
+
+        <!-- Brands List Grid -->
+        <div class="brand-grid" id="brandGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; margin-top: 24px;">
+          <!-- Dynamic Brand Cards generated via loadBrandManagement() -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB: Warehouse Management & Location -->
+    <section id="warehouses-locations" class="tab-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Warehouse & Showroom Locations</h2>
+          <p>Configure storage centers, showrooms, transit docks, and view stock status per site</p>
+        </div>
+        <div class="panel-actions">
+          <button class="action-btn primary" onclick="openAddWarehouseModal()">
+            <i class="fa-solid fa-plus"></i> Add New Location
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI Summary Cards for Warehouses -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <div class="kpi-icon-wrapper customer-icon">
+              <i class="fa-solid fa-warehouse"></i>
+            </div>
+            <span class="kpi-label">Active Locations</span>
+          </div>
+          <h3 class="kpi-value" id="statsTotalWarehouses">3</h3>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <div class="kpi-icon-wrapper sales-icon">
+              <i class="fa-solid fa-cubes"></i>
+            </div>
+            <span class="kpi-label">Total Location Stock</span>
+          </div>
+          <h3 class="kpi-value" id="statsWarehouseStockQty">1458</h3>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <div class="kpi-icon-wrapper revenue-icon">
+              <i class="fa-solid fa-store"></i>
+            </div>
+            <span class="kpi-label">Showrooms</span>
+          </div>
+          <h3 class="kpi-value" id="statsTotalShowrooms">1</h3>
+        </div>
+      </div>
+
+      <!-- Warehouses Cards Grid -->
+      <div class="warehouse-grid" id="warehouseGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; margin-top: 24px;">
+        <!-- Dynamic Warehouse Cards generated via loadWarehouseManagement() -->
+      </div>
+    </section>
+
+    <!-- TAB 7: Staff Directory -->
+    <section id="staff" class="tab-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Staff Directory & User Management</h2>
+          <p>Add and configure roles for cashiers, managers, and warehouse clerks</p>
+        </div>
+      </div>
+
+      <div class="split-grid">
+        <!-- Add Staff Form -->
+        <div class="grid-panel">
+          <h4>Add New Staff Member</h4>
+          <form id="staffForm" class="panel-form" onsubmit="submitNewStaff(event)">
+            <div class="form-group">
+              <label>Full Name</label>
+              <input type="text" id="sFullName" placeholder="e.g. Alice Smith" required>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="sUsername" placeholder="e.g. alice" required>
+              </div>
+              <div class="form-group">
+                <label>Role</label>
+                <select id="sRole" required>
+                  <option value="cashier">Cashier / Billing Clerk</option>
+                  <option value="manager">Store Manager</option>
+                  <option value="warehouse_staff">Warehouse Auditor</option>
+                  <option value="admin">System Admin</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Email Address</label>
+              <input type="email" id="sEmail" placeholder="e.g. alice@inventia.com" required>
+            </div>
+            <div class="form-group">
+              <label>Temporary Password</label>
+              <input type="password" id="sPassword" placeholder="Minimum 6 characters" required>
+            </div>
+            <button type="submit" class="submit-form-btn">Register Staff Account</button>
+          </form>
+        </div>
+
+        <!-- Staff List -->
+        <div class="grid-panel">
+          <h4>Registered Staff</h4>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name / Role</th>
+                  <th>Username / Email</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="staffListTable">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 8: Settings Manager -->
+    <section id="settings-tab" class="tab-panel">
+      <div class="panel-header">
+        <div>
+          <h2>App Settings</h2>
+          <p>Global parameters for billing details, tax rate, and logo text</p>
+        </div>
+      </div>
+
+      <div class="grid-panel" style="max-width: 700px; margin: 0 auto;">
+        <h4>Global Parameters Configuration</h4>
+        <form id="settingsForm" class="panel-form" onsubmit="submitSettings(event)" style="margin-top: 20px;">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Company Name</label>
+              <input type="text" id="setCompanyName" value="Inventia" required>
+            </div>
+            <div class="form-group">
+              <label>Billing Email</label>
+              <input type="email" id="setCompanyEmail" value="info@inventia.com" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Physical Address</label>
+            <input type="text" id="setCompanyAddress" value="123 Business Street, City, State 12345" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Company Contact Phone</label>
+              <input type="text" id="setCompanyPhone" value="+1 234 567 890" required>
+            </div>
+            <div class="form-group">
+              <label>Currency Symbol</label>
+              <input type="text" id="setCurrencySymbol" value="$" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Default Tax Rate (%)</label>
+              <input type="number" id="setTaxRate" step="0.01" value="10" required>
+            </div>
+            <div class="form-group">
+              <label>System Currency Code</label>
+              <input type="text" id="setCurrencyCode" value="USD" required>
+            </div>
+          </div>
+          <button type="submit" class="submit-form-btn">Apply Settings Save</button>
+        </form>
+      </div>
+
+      <div class="grid-panel" style="max-width: 700px; margin: 24px auto 0; padding: 20px;">
+        <h4>AI Agent API Configuration</h4>
+        <form id="aiSettingsForm" class="panel-form" onsubmit="submitAiSettings(event)" style="margin-top: 20px;">
+          <div class="form-row">
+            <div class="form-group">
+              <label>AI Provider API Endpoint</label>
+              <input type="text" id="setAiEndpoint" value="/api/ai/chat" required>
+            </div>
+            <div class="form-group">
+              <label>API Key / Bearer Token</label>
+              <input type="password" id="setAiApiKey" placeholder="••••••••••••••••" value="mock-api-key-1234">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>AI Model</label>
+              <select id="setAiModel">
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash (Fast, Recommended)</option>
+                <option value="gemini-1.5-pro">Gemini 1.5 Pro (Analytical)</option>
+                <option value="local-nlp">Local POS NLP Model (Default Fallback)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Temperature (Creativity)</label>
+              <input type="number" id="setAiTemp" step="0.1" min="0" max="1" value="0.2">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>AI Agent System Prompt Instructions</label>
+            <textarea id="setAiSystemPrompt" rows="3" style="width:100%; padding:10px; border:1px solid var(--border); border-radius:var(--radius-sm); font-family:var(--font); font-size:0.85rem; outline:none; box-sizing:border-box;">You are the Inventia POS Assistant. You have real-time access to database inventory products, quantities, prices, categories, and warehouses. Help the user check stock level, look up prices, search products by material/finish, and calculate project needs.</textarea>
+          </div>
+          <button type="submit" class="submit-form-btn" style="background-color: var(--violet-600);">Save AI Agent Integration</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- TAB 9: Reports & Analytics -->
+    <section id="reports" class="tab-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Reports & Analytics</h2>
+          <p>Generate financial, stock, and customer reports with clean visual insights</p>
+        </div>
+        <div class="panel-actions">
+          <button class="action-btn primary" onclick="window.print()">
+            <i class="fa-solid fa-print"></i> Print Report
+          </button>
+          <button class="action-btn secondary" onclick="exportActiveReportToCSV()">
+            <i class="fa-solid fa-file-csv"></i> Export to CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Report Tabs Selector -->
+      <div class="calc-tabs" style="margin-bottom: 24px;">
+        <button class="calc-tab active" id="repSalesBtn" onclick="switchReportTab('sales')">Sales Revenue Report</button>
+        <button class="calc-tab" id="repStockBtn" onclick="switchReportTab('stock')">Inventory Valuation</button>
+        <button class="calc-tab" id="repCustBtn" onclick="switchReportTab('cust')">Customer Credit Balances</button>
+      </div>
+
+      <!-- 1. SALES REPORT CONTAINER -->
+      <div id="reportSalesContainer" class="report-content-panel active">
+        <!-- Select Date Range -->
+        <div class="grid-panel" style="margin-bottom: 24px; padding: 18px 24px;">
+          <h4 style="font-size: 0.85rem; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;"><i class="fa-regular fa-calendar"></i> Select Date Range</h4>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; align-items: end;">
+            <div class="form-group" style="margin: 0;">
+              <label>Start Date</label>
+              <input type="date" id="repStartDate" value="2026-07-01" onchange="generateSalesReport()">
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label>End Date</label>
+              <input type="date" id="repEndDate" value="2026-07-31" onchange="generateSalesReport()">
+            </div>
+            <button class="action-btn primary" onclick="generateSalesReport()" style="height: 42px; justify-content: center;">
+              <i class="fa-solid fa-rotate"></i> Generate Report
+            </button>
+            <div class="form-group" style="margin: 0; position: relative;">
+              <button class="action-btn secondary" style="height: 42px; width: 100%; justify-content: space-between;" onclick="toggleQuickRangeDropdown()">
+                <span><i class="fa-solid fa-bolt"></i> Quick Range</span> <i class="fa-solid fa-chevron-down"></i>
+              </button>
+              <div id="quickRangeDropdown" class="dropdown-menu-list" style="display: none; position: absolute; top: 46px; right: 0; background: white; border: 1px solid var(--border); border-radius: var(--radius-sm); width: 100%; box-shadow: var(--shadow-md); z-index: 50;">
+                <button onclick="setQuickRange('today')" style="width: 100%; text-align: left; padding: 10px; border: none; background: transparent; cursor: pointer; font-size: 0.8rem;">Today</button>
+                <button onclick="setQuickRange('yesterday')" style="width: 100%; text-align: left; padding: 10px; border: none; background: transparent; cursor: pointer; font-size: 0.8rem;">Yesterday</button>
+                <button onclick="setQuickRange('this_week')" style="width: 100%; text-align: left; padding: 10px; border: none; background: transparent; cursor: pointer; font-size: 0.8rem;">This Week</button>
+                <button onclick="setQuickRange('this_month')" style="width: 100%; text-align: left; padding: 10px; border: none; background: transparent; cursor: pointer; font-size: 0.8rem;">This Month</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sales KPI Grid -->
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper sales-icon"><i class="fa-solid fa-cart-shopping"></i></div>
+              <span class="kpi-label">Total Sales</span>
+            </div>
+            <h3 class="kpi-value" id="repTotalSalesCount">2</h3>
+            <span class="kpi-subtext">Completed Transactions</span>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper revenue-icon"><i class="fa-solid fa-dollar-sign"></i></div>
+              <span class="kpi-label">Total Revenue</span>
+            </div>
+            <h3 class="kpi-value" id="repTotalRevenueAmt">$80.28</h3>
+            <span class="kpi-subtext">Gross Income</span>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper customer-icon"><i class="fa-solid fa-chart-line"></i></div>
+              <span class="kpi-label">Total Profit</span>
+            </div>
+            <h3 class="kpi-value" id="repTotalProfitAmt">$42.28</h3>
+            <span class="kpi-subtext">Net Profit</span>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper warehouse-icon"><i class="fa-solid fa-scale-balanced"></i></div>
+              <span class="kpi-label">Average Sale</span>
+            </div>
+            <h3 class="kpi-value" id="repAvgSaleAmt">$40.14</h3>
+            <span class="kpi-subtext">Per Transaction</span>
+          </div>
+        </div>
+
+        <!-- Sales Charts -->
+        <div class="split-grid-charts" style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; margin-bottom: 24px;">
+          <div class="grid-panel">
+            <div class="panel-header">
+              <h4>Daily Sales Performance</h4>
+              <div class="calc-tabs" style="width: auto;">
+                <button class="calc-tab active" id="btnRepChartRev" onclick="toggleRepChartMode('revenue')">Revenue</button>
+                <button class="calc-tab" id="btnRepChartTx" onclick="toggleRepChartMode('transactions')">Transactions</button>
+                <button class="calc-tab" id="btnRepChartProfit" onclick="toggleRepChartMode('profit')">Profit</button>
+              </div>
+            </div>
+            <div style="height: 250px; margin-top: 15px;">
+              <canvas id="repSalesLineChart"></canvas>
+            </div>
+          </div>
+          <div class="grid-panel">
+            <div class="panel-header">
+              <h4>Payment Distribution</h4>
+            </div>
+            <div style="height: 250px; margin-top: 15px;">
+              <canvas id="repPaymentDoughnutChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detailed Table -->
+        <div class="grid-panel">
+          <h4>Transaction Audit Log</h4>
+          <div class="table-container" style="margin-top: 15px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Invoice No</th>
+                  <th>Customer</th>
+                  <th>Date</th>
+                  <th>Payment Method</th>
+                  <th>Tax</th>
+                  <th>Total</th>
+                  <th>Profit</th>
+                </tr>
+              </thead>
+              <tbody id="repSalesTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. STOCK REPORT CONTAINER -->
+      <div id="reportStockContainer" class="report-content-panel">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper valuation-icon"><i class="fa-solid fa-vault"></i></div>
+              <span class="kpi-label">Stock Valuation (Cost)</span>
+            </div>
+            <h3 class="kpi-value" id="repStockValuationCost">$0.00</h3>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper valuation-icon"><i class="fa-solid fa-coins"></i></div>
+              <span class="kpi-label">Stock Valuation (Retail)</span>
+            </div>
+            <h3 class="kpi-value" id="repStockValuationRetail">$0.00</h3>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper sales-icon"><i class="fa-solid fa-cubes"></i></div>
+              <span class="kpi-label">Total Quantity in Stock</span>
+            </div>
+            <h3 class="kpi-value" id="repTotalStockQty">0</h3>
+          </div>
+        </div>
+
+        <div class="grid-panel">
+          <h4>Inventory Assets Ledger</h4>
+          <div class="table-container" style="margin-top: 15px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Product Name</th>
+                  <th>Cost Price</th>
+                  <th>Selling Price</th>
+                  <th>Quantity in Stock</th>
+                  <th>Valuation (Cost)</th>
+                  <th>Valuation (Retail)</th>
+                </tr>
+              </thead>
+              <tbody id="repStockTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. CUSTOMER REPORT CONTAINER -->
+      <div id="reportCustContainer" class="report-content-panel">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper revenue-icon"><i class="fa-solid fa-users"></i></div>
+              <span class="kpi-label">Active Customer Accounts</span>
+            </div>
+            <h3 class="kpi-value" id="repTotalCustCount">0</h3>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper alert-icon"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+              <span class="kpi-label">Total Outstanding Balances</span>
+            </div>
+            <h3 class="kpi-value text-alert" id="repTotalOutstandingAmt">$0.00</h3>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <div class="kpi-icon-wrapper customer-icon"><i class="fa-solid fa-award"></i></div>
+              <span class="kpi-label">Total Loyalty Points Issued</span>
+            </div>
+            <h3 class="kpi-value" id="repTotalLoyaltyPts">0 pts</h3>
+          </div>
+        </div>
+
+        <div class="grid-panel">
+          <h4>Customer Credit & Balances Audit Ledger</h4>
+          <div class="table-container" style="margin-top: 15px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Customer Name</th>
+                  <th>Phone Number</th>
+                  <th>Credit Limit</th>
+                  <th>Balance Owed</th>
+                  <th>Loyalty Tier</th>
+                  <th>Points</th>
+                </tr>
+              </thead>
+              <tbody id="repCustTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB: Sales Page -->
+    <section id="sales-page" class="tab-panel">
+      <div class="panel-header">
+        <div>
+          <h2><i class="fa-solid fa-list-check"></i> Sales History</h2>
+          <p>View all completed sales transactions and invoices</p>
+        </div>
+        <div class="panel-actions">
+          <button class="action-btn secondary" onclick="exportSalesToCSV()">
+            <i class="fa-solid fa-file-csv"></i> Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div class="grid-panel">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Invoice No</th>
+                <th>Customer</th>
+                <th>Date</th>
+                <th>Items</th>
+                <th>Payment</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="salesPageTable">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB: Backup & Restore -->
+    <section id="backup-tab" class="tab-panel">
+      <div class="panel-header">
+        <div>
+          <h2><i class="fa-solid fa-database"></i> Backup & Restore</h2>
+          <p>Manage your database backups and restore points</p>
+        </div>
+      </div>
+
+      <div class="split-grid">
+        <div class="grid-panel">
+          <h3><i class="fa-solid fa-download"></i> Create Backup</h3>
+          <p style="color: var(--text-muted); margin: 12px 0;">Export your entire database including products, customers, sales history, and settings.</p>
+          <div style="display: flex; gap: 12px; margin-top: 16px;">
+            <button class="action-btn primary" onclick="alert('Database backup initiated. Your file will download shortly.')">
+              <i class="fa-solid fa-hard-drive"></i> Full Backup (.sql)
+            </button>
+            <button class="action-btn secondary" onclick="alert('JSON export initiated.')">
+              <i class="fa-solid fa-file-code"></i> Export JSON
+            </button>
+          </div>
+          <div style="margin-top: 24px; padding: 16px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid var(--success);">
+            <strong style="color: var(--success);"><i class="fa-solid fa-circle-check"></i> Last Backup</strong>
+            <p style="margin: 4px 0 0; color: var(--text-muted); font-size: 0.85rem;">July 21, 2026 at 10:30 AM — Full backup (2.4 MB)</p>
+          </div>
+        </div>
+
+        <div class="grid-panel">
+          <h3><i class="fa-solid fa-upload"></i> Restore from Backup</h3>
+          <p style="color: var(--text-muted); margin: 12px 0;">Upload a previous backup file to restore your data. This will overwrite current data.</p>
+          <div style="border: 2px dashed var(--border-color); border-radius: 12px; padding: 40px; text-align: center; margin-top: 16px;">
+            <i class="fa-solid fa-cloud-arrow-up" style="font-size: 2rem; color: var(--primary); margin-bottom: 12px; display: block;"></i>
+            <p style="font-weight: 600;">Drop your backup file here</p>
+            <p style="color: var(--text-muted); font-size: 0.8rem;">Supports .sql and .json files up to 50MB</p>
+            <button class="action-btn secondary" style="margin-top: 12px;" onclick="alert('File browser opened')">
+              <i class="fa-solid fa-folder-open"></i> Browse Files
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dark Navy Footer -->
+    <footer class="app-dark-footer">
+      <div class="footer-grid">
+        <div class="footer-brand-col">
+          <div class="footer-logo">
+            <i class="fa-solid fa-cash-register"></i> Inventia
+          </div>
+          <p class="footer-desc">Clean and reliable point-of-sale experience for daily business operations.</p>
+          <div class="footer-socials">
+            <a href="#"><i class="fa-brands fa-facebook-f"></i></a>
+            <a href="#"><i class="fa-brands fa-twitter"></i></a>
+            <a href="#"><i class="fa-brands fa-instagram"></i></a>
+            <a href="#"><i class="fa-brands fa-linkedin-in"></i></a>
+            <a href="#"><i class="fa-brands fa-youtube"></i></a>
+          </div>
+        </div>
+
+        <div class="footer-col">
+          <h4>Navigation</h4>
+          <ul>
+            <li><a href="#" onclick="switchTab('dashboard')">Dashboard</a></li>
+            <li><a href="#" onclick="switchTab('pos')">Point of Sale</a></li>
+            <li><a href="#" onclick="switchTab('inventory')">Products</a></li>
+            <li><a href="#" onclick="switchTab('customers')">Customers</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4>Resources</h4>
+          <ul>
+            <li><a href="#">Help Center</a></li>
+            <li><a href="#">API Docs</a></li>
+            <li><a href="#">Release Notes</a></li>
+            <li><a href="#">Status Page</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4>Company Contact</h4>
+          <ul class="contact-list">
+            <li><i class="fa-solid fa-location-dot"></i> 123 Business Street, City, State 12345</li>
+            <li><i class="fa-solid fa-phone"></i> +1 234 567 890</li>
+            <li><i class="fa-solid fa-envelope"></i> info@inventia.com</li>
+            <li><i class="fa-solid fa-clock"></i> Mon - Sat, 9:00 AM - 6:00 PM</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom-bar">
+        <span>© 2026 Inventia v1.0.0. All rights reserved.</span>
+        <div class="footer-bottom-links">
+          <a href="#">Terms of Service</a>
+          <a href="#">Privacy Policy</a>
+          <a href="#">Security</a>
+        </div>
+      </div>
+    </footer>
+  </main>
+
+  <!-- ================= MODALS & OVERLAYS =======  <!-- Modal 1: Area Calculator -->
+  <div class="modal-overlay" id="calculatorModal">
+    <div class="modal-card" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3>Area Calculator</h3>
+        <i class="fa-solid fa-xmark close-modal" onclick="toggleCalculatorModal()"></i>
+      </div>
+      <div class="modal-body">
+        <div class="calc-tabs" style="display:flex; gap:10px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:8px;">
+          <button class="calc-tab active" id="btnCalcFloor" onclick="switchCalcType('floor')" style="flex:1; padding:10px; border:none; background:none; border-bottom:3px solid var(--blue-600); font-weight:700; color:var(--blue-600); cursor:pointer;">Floor Tiles / Panels</button>
+          <button class="calc-tab" id="btnCalcWall" onclick="switchCalcType('wall')" style="flex:1; padding:10px; border:none; background:none; border-bottom:3px solid transparent; font-weight:600; color:var(--ink-secondary); cursor:pointer;">Wall Panels</button>
+        </div>
+        
+        <div class="calc-content-wrapper">
+          <!-- Type Floor -->
+          <div id="calcTypeFloor" class="calc-type-panel">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Room Length (ft)</label>
+                <input type="number" id="calcLength" value="10" oninput="calculateBoxes()">
+              </div>
+              <div class="form-group">
+                <label>Room Width (ft)</label>
+                <input type="number" id="calcWidth" value="10" oninput="calculateBoxes()">
+              </div>
+            </div>
+            <div class="form-row" style="margin-top:10px;">
+              <div class="form-group">
+                <label>Wastage / Buffer Margin (%)</label>
+                <input type="number" id="calcWastage" value="10" oninput="calculateBoxes()">
+              </div>
+              <div class="form-group">
+                <label>Tile Coverage Per Box (Sq. Ft.)</label>
+                <input type="number" id="calcBoxCoverage" value="14.4" oninput="calculateBoxes()">
+              </div>
+            </div>
+
+            <div class="calc-result-panel" style="margin-top:15px; background:var(--bg); padding:15px; border-radius:var(--radius-sm);">
+              <div class="result-row" style="display:flex; justify-content:space-between; font-size:0.85rem; color:var(--ink-secondary); margin-bottom:8px;">
+                <span>Net Floor Area:</span>
+                <span id="resNetArea" style="font-weight:600;">100 Sq. Ft.</span>
+              </div>
+              <div class="result-row" style="display:flex; justify-content:space-between; font-size:0.85rem; color:var(--ink-secondary); margin-bottom:8px;">
+                <span>Gross Area (+ Wastage):</span>
+                <span id="resGrossArea" style="font-weight:600;">110 Sq. Ft.</span>
+              </div>
+              <hr style="border:none; border-top:1px solid var(--border); margin:8px 0;">
+              <div class="result-row final-result" style="display:flex; justify-content:space-between; font-size:1.05rem; font-weight:800; color:var(--ink);">
+                <span>Total Boxes Needed:</span>
+                <span id="resBoxesNeeded">8 Boxes</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Type Wall -->
+          <div id="calcTypeWall" class="calc-type-panel" style="display:none;">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Total Wall Width (ft)</label>
+                <input type="number" id="calcWallWidth" value="12" oninput="calculateBoxes()">
+              </div>
+              <div class="form-group">
+                <label>Wall Height (ft)</label>
+                <input type="number" id="calcWallHeight" value="10" oninput="calculateBoxes()">
+              </div>
+            </div>
+            
+            <div class="form-row" style="margin-top:10px;">
+              <div class="form-group">
+                <label>Panel Width (inches)</label>
+                <input type="number" id="calcPanelWidth" value="8" oninput="calculateBoxes()">
+              </div>
+              <div class="form-group">
+                <label>Panel Height (ft)</label>
+                <input type="number" id="calcPanelHeight" value="10" oninput="calculateBoxes()">
+              </div>
+            </div>
+
+            <div class="form-row" style="margin-top:10px;">
+              <div class="form-group">
+                <label>Wastage Margin (%)</label>
+                <input type="number" id="calcWallWastage" value="10" oninput="calculateBoxes()">
+              </div>
+              <div class="form-group">
+                <label>Panels Per Pack / Box</label>
+                <input type="number" id="calcPanelsPerPack" value="10" oninput="calculateBoxes()">
+              </div>
+            </div>
+
+            <div class="calc-result-panel" style="margin-top:15px; background:var(--bg); padding:15px; border-radius:var(--radius-sm);">
+              <div class="result-row" style="display:flex; justify-content:space-between; font-size:0.85rem; color:var(--ink-secondary); margin-bottom:8px;">
+                <span>Total Wall Area:</span>
+                <span id="resWallNetArea" style="font-weight:600;">120 Sq. Ft.</span>
+              </div>
+              <div class="result-row" style="display:flex; justify-content:space-between; font-size:0.85rem; color:var(--ink-secondary); margin-bottom:8px;">
+                <span>Single Panel Coverage:</span>
+                <span id="resSinglePanelArea" style="font-weight:600;">6.67 Sq. Ft.</span>
+              </div>
+              <div class="result-row" style="display:flex; justify-content:space-between; font-size:0.85rem; color:var(--ink-secondary); margin-bottom:8px;">
+                <span>Panels Needed (inc. wastage):</span>
+                <span id="resPanelsNeeded" style="font-weight:600;">20 Panels</span>
+              </div>
+              <hr style="border:none; border-top:1px solid var(--border); margin:8px 0;">
+              <div class="result-row final-result" style="display:flex; justify-content:space-between; font-size:1.05rem; font-weight:800; color:var(--ink);">
+                <span>Total Packs/Boxes Needed:</span>
+                <span id="resWallPacksNeeded">2 Packs</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn secondary" onclick="toggleCalculatorModal()">Close</button>
+        <button class="modal-btn primary" onclick="copyCalculatorResultToCart()">Apply Result to Cart</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Add New Product Form -->
+  <div class="modal-overlay" id="productModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Create New Interior Product</h3>
+        <i class="fa-solid fa-xmark close-modal" onclick="closeProductModal()"></i>
+      </div>
+      <div class="modal-body">
+        <form id="productForm" onsubmit="submitNewProduct(event)">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Product Name</label>
+              <input type="text" id="pName" placeholder="e.g. Carrara White Glossy Tile" required>
+            </div>
+            <div class="form-group">
+              <label>SKU</label>
+              <input type="text" id="pSku" placeholder="e.g. TL-CAR-60-GL" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Brand</label>
+              <select id="pBrand" required></select>
+            </div>
+            <div class="form-group">
+              <label>Category</label>
+              <select id="pCategory" required></select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Unit of Measure (UOM)</label>
+              <select id="pUom" onchange="toggleBoxCoverageField()" required>
+                <option value="piece">Piece</option>
+                <option value="box">Box (Calculable)</option>
+                <option value="sqft">Sq. Ft.</option>
+                <option value="meter">Meter</option>
+                <option value="bundle">Bundle</option>
+              </select>
+            </div>
+            <div class="form-group" id="pBoxCoverageGroup" style="display:none;">
+              <label>Box Coverage Area (Sq. Ft.)</label>
+              <input type="number" id="pBoxCoverage" step="0.01" placeholder="e.g. 14.4">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Cost Price ($)</label>
+              <input type="number" id="pCost" step="0.01" placeholder="e.g. 15.00" required>
+            </div>
+            <div class="form-group">
+              <label>Selling Price ($)</label>
+              <input type="number" id="pPrice" step="0.01" placeholder="e.g. 29.99" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Material</label>
+              <input type="text" id="pMaterial" placeholder="e.g. Ceramic / Wood / Brass">
+            </div>
+            <div class="form-group">
+              <label>Finish</label>
+              <input type="text" id="pFinish" placeholder="e.g. Polished Gloss / Matte">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Dimensions</label>
+              <input type="text" id="pDimensions" placeholder="e.g. 600x600 mm / 3x6 ft">
+            </div>
+            <div class="form-group">
+              <label>Shade / Batch Lot No.</label>
+              <input type="text" id="pLot" placeholder="e.g. BATCH-2026A">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Product Image File</label>
+            <input type="file" id="pImageFile" accept="image/*" style="padding:6px">
+          </div>
+
+          <button type="submit" class="submit-form-btn">Save Product</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Stock Inward / Adjust Form -->
+  <div class="modal-overlay" id="stockInwardModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Stock Inward & Adjustments</h3>
+        <i class="fa-solid fa-xmark close-modal" onclick="closeStockInwardModal()"></i>
+      </div>
+      <div class="modal-body">
+        <form id="stockInwardForm" onsubmit="submitStockAdjustment(event)">
+          <div class="form-group">
+            <label>Select Product</label>
+            <select id="adjProduct" required></select>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Select Warehouse</label>
+              <select id="adjWarehouse" required>
+                <option value="1">Main Warehouse</option>
+                <option value="2">City Showroom</option>
+                <option value="3">Transit Dock</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Quantity Change</label>
+              <input type="number" id="adjQty" placeholder="e.g. 50 or -10" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Reason</label>
+            <select id="adjReason" required>
+              <option value="restock">Restock / Inward Goods</option>
+              <option value="adjustment">Stock Audit Correction</option>
+              <option value="return">Customer Return</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Audit Notes</label>
+            <input type="text" id="adjNotes" placeholder="e.g. Received PO-102 or Audited stock variance">
+          </div>
+          <button type="submit" class="submit-form-btn">Adjust Stock Ledger</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Add New Customer Form -->
+  <div class="modal-overlay" id="customerModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Create Customer Profile</h3>
+        <i class="fa-solid fa-xmark close-modal" onclick="closeCustomerModal()"></i>
+      </div>
+      <div class="modal-body">
+        <form id="customerForm" onsubmit="submitNewCustomer(event)">
+          <div class="form-group">
+            <label>Customer Name / Company</label>
+            <input type="text" id="cName" placeholder="e.g. Apex Builders Ltd." required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Phone Number</label>
+              <input type="text" id="cPhone" placeholder="e.g. +1 555-1029" required>
+            </div>
+            <div class="form-group">
+              <label>Email Address</label>
+              <input type="email" id="cEmail" placeholder="e.g. purchase@apex.com">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Billing Address</label>
+            <input type="text" id="cAddress" placeholder="e.g. 45 Industrial Road, Sector 3">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Account Credit Limit ($)</label>
+              <input type="number" id="cLimit" value="0" placeholder="e.g. 10000">
+            </div>
+            <div class="form-group">
+              <label>Initial Balance Owed ($)</label>
+              <input type="number" id="cBalance" value="0" placeholder="e.g. 0">
+            </div>
+          </div>
+          <button type="submit" class="submit-form-btn">Save Customer Account</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 6: Barcode Scanner Simulation -->
+  <div class="modal-overlay" id="scannerModal">
+    <div class="modal-card" style="width: 420px;">
+      <div class="modal-header">
+        <h3>Barcode Scanner Simulation</h3>
+        <i class="fa-solid fa-xmark close-modal" onclick="closeScannerModal()"></i>
+      </div>
+      <div class="modal-body" style="text-align: center; padding: 24px;">
+        <div class="scanner-viewport" style="background-color: #0f172a; color: white; padding: 30px 20px; border-radius: var(--radius-md); margin-bottom: 20px;">
+          <i class="fa-solid fa-camera" style="font-size: 2.5rem; color: var(--primary); margin-bottom: 12px; display: block;"></i>
+          <p style="font-size: 0.9rem;">Point hardware scanner or type barcode below</p>
+        </div>
+        <form onsubmit="handleScanSubmit(event)">
+          <div class="form-group">
+            <input type="text" id="manualScanInput" placeholder="Scan barcode (e.g. PHN001, CLT004, TL-CAR)" required style="text-align: center; font-weight: 700; font-size: 1.1rem; padding: 12px;">
+          </div>
+          <button type="submit" class="submit-form-btn">Simulate Scan & Add to Cart</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 5: Barcode Viewer & Printer -->
+  <div class="modal-overlay" id="barcodeModal">
+    <div class="modal-card" style="width: 380px;">
+      <div class="modal-header">
+        <h3>Product Barcode Label</h3>
+        <i class="fa-solid fa-xmark close-modal" onclick="closeBarcodeModal()"></i>
+      </div>
+      <div class="modal-body" style="text-align: center; padding: 30px;">
+        <h4 id="barcodeProductTitle" style="margin-bottom: 10px;">Product Name</h4>
+        <div style="background-color: white; padding: 15px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: inline-block;">
+          <svg id="barcodeImage"></svg>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn secondary" onclick="closeBarcodeModal()">Close</button>
+        <button class="modal-btn primary" onclick="window.print()"><i class="fa-solid fa-print"></i> Print Label</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 7: Add New Category Modal -->
+  <div class="modal-overlay" id="categoryModal">
+    <div class="modal-card" style="max-width: 450px;">
+      <div class="modal-header">
+        <h3>Add New Category</h3>
+        <i class="fa-solid fa-xmark close-modal" onclick="closeCategoryModal()"></i>
+      </div>
+      <div class="modal-body">
+        <form id="categoryModalForm" onsubmit="submitNewCategoryModal(event)">
+          <div class="form-group">
+            <label>Category Name</label>
+            <input type="text" id="catModalNameInput" placeholder="e.g. Books / Flooring & Tiles" required>
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="catModalDescInput" placeholder="Brief category description..." rows="3" style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font); font-size: 0.85rem; outline: none;"></textarea>
+          </div>
+          <button type="submit" class="submit-form-btn">Create Category</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 8: Add Brand Modal -->
+  <div class="modal-overlay" id="brandModal">
+    <div class="modal-card" style="max-width: 450px;">
+      <div class="modal-header">
+        <h3>Add New Brand</h3>
+        <i class="fa-solid fa-xmark close-modal" onclick="closeBrandModal()"></i>
+      </div>
+      <div class="modal-body">
+        <form id="brandModalForm" onsubmit="submitNewBrandModal(event)">
+          <div class="form-group">
+            <label>Brand Name</label>
+            <input type="text" id="brandModalNameInput" placeholder="e.g. Kohler / Havells" required>
+          </div>
+          <div class="form-group">
+            <label>Brand Code (3 Letters)</label>
+            <input type="text" id="brandModalCodeInput" placeholder="e.g. KOH" required maxlength="10">
+          </div>
+          <button type="submit" class="submit-form-btn">Create Brand</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 9: Edit Brand Modal -->
+  <div class="modal-overlay" id="brandEditModal">
+    <div class="modal-card" style="max-width: 450px;">
+      <div class="modal-header">
+        <h3>Edit Brand</h3>
+        <i class="fa-solid fa-xmark close-modal" onclick="closeBrandEditModal()"></i>
+      </div>
+      <div class="modal-body">
+        <form id="brandEditModalForm" onsubmit="submitEditBrandModal(event)">
+          <input type="hidden" id="brandEditModalIdInput">
+          <div class="form-group">
+            <label>Brand Name</label>
+            <input type="text" id="brandEditModalNameInput" required>
+          </div>
+          <div class="form-group">
+            <label>Brand Code</label>
+            <input type="text" id="brandEditModalCodeInput" required>
+          </div>
+          <button type="submit" class="submit-form-btn">Save Changes</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 10: Add Warehouse Modal -->
+  <div class="modal-overlay" id="warehouseModal">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3>Add Storage Location</h3>
+        <i class="fa-solid fa-xmark close-modal" onclick="closeWarehouseModal()"></i>
+      </div>
+      <div class="modal-body">
+        <form id="warehouseModalForm" onsubmit="submitNewWarehouseModal(event)">
+          <div class="form-group">
+            <label>Location Name</label>
+            <input type="text" id="whModalNameInput" placeholder="e.g. North Transit Dock" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Location Code</label>
+              <input type="text" id="whModalCodeInput" placeholder="e.g. WH-NORTH" required>
+            </div>
+            <div class="form-group">
+              <label>Location Type</label>
+              <select id="whModalTypeInput" required>
+                <option value="warehouse">Warehouse (Storage)</option>
+                <option value="showroom">Showroom (Retail Outlet)</option>
+                <option value="transit">Transit Dock (In-Transit)</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Physical Address</label>
+            <input type="text" id="whModalAddressInput" placeholder="Street Address, City" required>
+          </div>
+          <button type="submit" class="submit-form-btn">Create Location</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 11: Edit Warehouse Modal -->
+  <div class="modal-overlay" id="warehouseEditModal">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3>Edit Storage Location</h3>
+        <i class="fa-solid fa-xmark close-modal" onclick="closeWarehouseEditModal()"></i>
+      </div>
+      <div class="modal-body">
+        <form id="warehouseEditModalForm" onsubmit="submitEditWarehouseModal(event)">
+          <input type="hidden" id="whEditModalIdInput">
+          <div class="form-group">
+            <label>Location Name</label>
+            <input type="text" id="whEditModalNameInput" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Location Code</label>
+              <input type="text" id="whEditModalCodeInput" required>
+            </div>
+            <div class="form-group">
+              <label>Location Type</label>
+              <select id="whEditModalTypeInput" required>
+                <option value="warehouse">Warehouse (Storage)</option>
+                <option value="showroom">Showroom (Retail Outlet)</option>
+                <option value="transit">Transit Dock (In-Transit)</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Physical Address</label>
+            <input type="text" id="whEditModalAddressInput" required>
+          </div>
+          <button type="submit" class="submit-form-btn">Save Changes</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 12: Edit Category Modal -->
+  <div class="modal-overlay" id="categoryEditModal">
+    <div class="modal-card" style="max-width: 450px;">
+      <div class="modal-header">
+        <h3>Edit Category</h3>
+        <i class="fa-solid fa-xmark close-modal" onclick="closeCategoryEditModal()"></i>
+      </div>
+      <div class="modal-body">
+        <form id="categoryEditModalForm" onsubmit="submitEditCategoryModal(event)">
+          <input type="hidden" id="categoryEditModalIdInput">
+          <div class="form-group">
+            <label>Category Name</label>
+            <input type="text" id="categoryEditModalNameInput" required>
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="categoryEditModalDescInput" rows="3" style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font); font-size: 0.85rem; outline: none;"></textarea>
+          </div>
+          <button type="submit" class="submit-form-btn">Save Changes</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating AI Assistant Bubble -->
+  <div id="aiChatBubble" onclick="toggleAiChatDrawer()" style="position:fixed; bottom:24px; right:24px; width:56px; height:56px; background:linear-gradient(135deg, var(--violet-600), var(--blue-600)); border-radius:50%; display:grid; place-items:center; color:white; font-size:1.45rem; cursor:pointer; box-shadow:0 4px 16px rgba(124,58,237,0.4); z-index:300; transition:all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+    <i class="fa-solid fa-comments"></i>
+  </div>
+
+  <!-- AI Chat Drawer -->
+  <div id="aiChatDrawer" style="position:fixed; top:0; right:-380px; width:380px; height:100vh; background:var(--bg-card); border-left:1px solid var(--border); box-shadow:var(--shadow-xl); z-index:290; display:flex; flex-direction:column; transition:all 0.3s ease;">
+    <!-- Chat Header -->
+    <div style="padding:16px 20px; background:linear-gradient(135deg, var(--violet-600), var(--blue-600)); color:white; display:flex; justify-content:space-between; align-items:center;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <i class="fa-solid fa-robot" style="font-size:1.25rem;"></i>
+        <div>
+          <h4 style="font-weight:750; font-size:0.95rem; margin:0;">Inventia AI Agent</h4>
+          <span style="font-size:0.7rem; opacity:0.8; display:flex; align-items:center; gap:4px;"><span style="width:6px; height:6px; background:#10b981; border-radius:50%; display:inline-block;"></span> Active POS Helper</span>
+        </div>
+      </div>
+      <i class="fa-solid fa-xmark" onclick="toggleAiChatDrawer()" style="cursor:pointer; font-size:1.1rem; opacity:0.8; transition:opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.8"></i>
+    </div>
+    
+    <!-- Chat Messages -->
+    <div id="aiChatMessages" style="flex:1; padding:20px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
+      <!-- Welcome Message -->
+      <div class="chat-msg agent" style="max-width:85%; background:var(--bg); padding:12px 14px; border-radius:12px 12px 12px 2px; align-self:flex-start; font-size:0.82rem; line-height:1.45; color:var(--ink-secondary);">
+        Hi there! I am your AI assistant. I can query our live stock, prices, materials, and locations. Ask me anything about our products!
+      </div>
+    </div>
+    
+    <!-- Chat Input Form -->
+    <form id="aiChatForm" onsubmit="sendAiMessage(event)" style="padding:16px; border-top:1px solid var(--border); background:var(--bg-card); display:flex; gap:8px;">
+      <input type="text" id="aiChatInput" placeholder="Ask about stock, price, materials..." required style="flex:1; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.82rem; font-family:var(--font); outline:none; transition:border-color var(--transition);" onfocus="this.style.borderColor='var(--violet-600)'" onblur="this.style.borderColor='var(--border)'">
+      <button type="submit" style="width:36px; height:36px; background:var(--violet-600); border:none; border-radius:var(--radius-sm); color:white; cursor:pointer; display:grid; place-items:center; transition:background-color var(--transition);" onmouseover="this.style.backgroundColor='var(--blue-600)'" onmouseout="this.style.backgroundColor='var(--violet-600)'">
+        <i class="fa-solid fa-paper-plane" style="font-size:0.85rem;"></i>
+      </button>
+    </form>
+  </div>
+
+  <!-- JsBarcode Script -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+  <!-- JavaScript File -->
+  <script src="app.js?v=2.1"></script>
+</body>
+</html>

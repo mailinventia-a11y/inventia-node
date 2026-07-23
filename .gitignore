@@ -1,0 +1,80 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+shinkwrap.log
+
+# Diagnostic reports (https://nodejs.org/api/report.html)
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# TypeScript v1 declaration files
+typings/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microgenerator local configurations
+.yo-rc.json
+
+# Next.js build files
+.next/
+out/
+
+# nuxt.js build project
+.nuxt/
+
+# gatsby files
+.cache/
+# Comment-out next line if you want to commit physical templates in your git repo
+# public
+
+# vuepress build output
+.vuepress/dist
+
+# Serverless Webpack templates
+.webpack/
+
+# Yii2 backup directory
+# @webroot/assets
+
+# Folder for Local servers
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local DB data
+.dynamodb/
+
+# Serverless Webpack directories
+.serverless_plugins/
+
+# SQLite databases
+*.db
+*.sqlite
+
+# Environment variables
+.env
+.env.development.local
+.env.local
+.env.production.local
+.env.staging.local
+.env.test.local
+.env.html
+
+# OS metadata
+.DS_Store
+Thumbs.db
