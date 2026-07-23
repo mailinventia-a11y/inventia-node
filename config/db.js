@@ -8,7 +8,7 @@ dotenv.config();
 
 const isSupabaseConfigured = () => {
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_KEY;
+  const key = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
   return url && key && !url.includes('your-project-id') && !url.includes('placeholder') && key !== 'your-supabase-anon-key';
 };
 
@@ -17,11 +17,12 @@ let sqliteDb = null;
 
 if (isSupabaseConfigured()) {
   console.log('🔌 Connecting to Supabase cloud database...');
-  supabaseClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+  supabaseClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY);
 } else {
-  console.log('📂 No valid Supabase credentials found. Initializing local SQLite fallback database (pos.db)...');
+  console.log('📂 No valid Supabase credentials found. Initializing local SQLite fallback database...');
   
-  const dbPath = path.join(process.cwd(), 'pos.db');
+  // Vercel serverless has a read-only filesystem. Use in-memory SQLite ':memory:' on Vercel to avoid crashes.
+  const dbPath = process.env.VERCEL ? ':memory:' : path.join(process.cwd(), 'pos.db');
   sqliteDb = new sqlite3.Database(dbPath);
   
   // Wrap database operations in promises

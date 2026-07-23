@@ -143,6 +143,13 @@ async function handleLoginSubmit(event) {
       body: JSON.stringify({ username, password })
     });
 
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await res.text();
+      console.error('Non-JSON response:', text);
+      throw new Error('Database connection error. Please verify your Supabase configuration in Vercel environment variables.');
+    }
+
     const data = await res.json();
     if (!res.ok || !data.success) {
       throw new Error(data.error || 'Invalid username or password.');
