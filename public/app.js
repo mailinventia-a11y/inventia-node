@@ -1007,28 +1007,13 @@ async function submitNewProduct(event) {
   let imageUrl = '';
 
   try {
-    // If a file is selected, upload it first
+    // If a file is selected, convert to Base64 and use directly (perfect for serverless Vercel)
     if (fileInput && fileInput.files && fileInput.files[0]) {
       const file = fileInput.files[0];
-      const base64 = await toBase64(file);
-      
-      const uploadRes = await fetch('/api/inventory/products/upload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer mock-token',
-          'x-user-role': 'manager'
-        },
-        body: JSON.stringify({ fileName: file.name, base64Data: base64 })
-      });
-      
-      if (uploadRes.ok) {
-        const uploadData = await uploadRes.json();
-        imageUrl = uploadData.imageUrl;
-      }
+      imageUrl = await toBase64(file);
     }
   } catch (err) {
-    console.error('Image upload failed, saving without image:', err);
+    console.error('Image processing failed:', err);
   }
   
   const payload = {
