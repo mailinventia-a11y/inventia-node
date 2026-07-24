@@ -249,6 +249,17 @@ router.get('/invoice/:id/pdf', async (req, res) => {
 
     if (itemsErr) throw itemsErr;
 
+    // Fetch currency settings dynamically
+    const { data: settingsData } = await supabase
+      .from('settings')
+      .select('setting_key, setting_value');
+
+    let currencySymbol = '$';
+    if (settingsData) {
+      const sym = settingsData.find(s => s.setting_key === 'currency_symbol');
+      if (sym) currencySymbol = sym.setting_value;
+    }
+
     // 3. Generate PDF
     const doc = new PDFDocument({ margin: 50 });
     res.setHeader('Content-Type', 'application/pdf');
@@ -291,8 +302,8 @@ router.get('/invoice/:id/pdf', async (req, res) => {
     items.forEach(item => {
       doc.text(`${item.products.name} (${item.products.sku})`, 50, position, { width: 220 });
       doc.text(`${item.quantity} ${item.products.uom}`, 280, position, { width: 50, align: 'right' });
-      doc.text(`$${Number(item.unit_price).toFixed(2)}`, 340, position, { width: 80, align: 'right' });
-      doc.text(`$${Number(item.total_price).toFixed(2)}`, 430, position, { width: 100, align: 'right' });
+      doc.text(`${currencySymbol}${Number(item.unit_price).toFixed(2)}`, 340, position, { width: 80, align: 'right' });
+      doc.text(`${currencySymbol}${Number(item.total_price).toFixed(2)}`, 430, position, { width: 100, align: 'right' });
       position += 20;
     });
 
@@ -300,20 +311,20 @@ router.get('/invoice/:id/pdf', async (req, res) => {
     doc.line(50, position + 5, 530, position + 5).stroke();
     position += 15;
     doc.text('Subtotal:', 340, position, { width: 80, align: 'right' });
-    doc.text(`$${Number(sale.subtotal).toFixed(2)}`, 430, position, { width: 100, align: 'right' });
+    doc.text(`${currencySymbol}${Number(sale.subtotal).toFixed(2)}`, 430, position, { width: 100, align: 'right' });
 
     position += 15;
     doc.text('Discount:', 340, position, { width: 80, align: 'right' });
-    doc.text(`-$${Number(sale.discount).toFixed(2)}`, 430, position, { width: 100, align: 'right' });
+    doc.text(`-${currencySymbol}${Number(sale.discount).toFixed(2)}`, 430, position, { width: 100, align: 'right' });
 
     position += 15;
     doc.text('Tax:', 340, position, { width: 80, align: 'right' });
-    doc.text(`$${Number(sale.tax_amount).toFixed(2)}`, 430, position, { width: 100, align: 'right' });
+    doc.text(`${currencySymbol}${Number(sale.tax_amount).toFixed(2)}`, 430, position, { width: 100, align: 'right' });
 
     position += 20;
     doc.font('Helvetica-Bold');
     doc.text('Total Amount:', 340, position, { width: 80, align: 'right' });
-    doc.text(`$${Number(sale.total).toFixed(2)}`, 430, position, { width: 100, align: 'right' });
+    doc.text(`${currencySymbol}${Number(sale.total).toFixed(2)}`, 430, position, { width: 100, align: 'right' });
 
     // Footer
     doc.font('Helvetica-Oblique');

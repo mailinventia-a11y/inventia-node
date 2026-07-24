@@ -3,6 +3,8 @@ let currentTab = 'dashboard';
 let cart = [];
 let calculatorMode = 'dims';
 let activeCalculatorProduct = null;
+let currencySymbol = '$';
+let currencyCode = 'USD';
 
 // Mock Data Store (Fallbacks if Express server / Supabase is loading/offline)
 let brands = [
@@ -293,6 +295,12 @@ async function syncWithBackend() {
           const logo = document.querySelector('.logo-title');
           if (logo) logo.innerText = item.setting_value.toUpperCase();
         }
+        if (item.setting_key === 'currency_symbol') {
+          currencySymbol = item.setting_value;
+        }
+        if (item.setting_key === 'currency_code') {
+          currencyCode = item.setting_value;
+        }
       });
     }
 
@@ -464,10 +472,10 @@ function loadDashboardData() {
   if (elSales) elSales.innerText = todaySalesCount;
   
   const elRev = document.getElementById('kpiRevenue');
-  if (elRev) elRev.innerText = `$${todayRevenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  if (elRev) elRev.innerText = `${currencySymbol}${todayRevenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 
   const elVal = document.getElementById('kpiValuation');
-  if (elVal) elVal.innerText = `$${totalValuation.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  if (elVal) elVal.innerText = `${currencySymbol}${totalValuation.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
   
   const elLow = document.getElementById('kpiLowStock');
   if (elLow) elLow.innerText = `${lowStockCount} Products`;
@@ -494,7 +502,7 @@ function loadDashboardData() {
         <td><strong>${sale.invoice_no}</strong></td>
         <td>${cust}</td>
         <td><span class="badge-pay">${sale.payment_method}</span></td>
-        <td>$${(sale.total || 0).toFixed(2)}</td>
+        <td>${currencySymbol}${(sale.total || 0).toFixed(2)}</td>
         <td>
           <button class="action-btn-sm" onclick="downloadInvoice(${sale.id})"><i class="fa-solid fa-file-pdf"></i> PDF</button>
         </td>
@@ -529,7 +537,7 @@ function loadDashboardData() {
             <img src="${photoUrl}" style="width:36px; height:36px; border-radius:6px; object-fit:cover;">
             <strong>${p.name}</strong>
           </td>
-          <td>$${(p.selling_price || 0).toFixed(2)}</td>
+          <td>${currencySymbol}${(p.selling_price || 0).toFixed(2)}</td>
           <td>${p.sales_count || 0}</td>
           <td><span class="badge-growth">↑ 100%</span></td>
         `;
@@ -659,7 +667,7 @@ function loadPOSCatalog(filteredList = null) {
         </div>
         <h5 style="font-size: 0.95rem; font-weight: 700; color: var(--text-main); margin-bottom: 4px; line-height: 1.3;">${p.name}</h5>
         <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 8px;">${catName}</span>
-        <div style="font-size: 1.15rem; font-weight: 800; color: var(--primary); margin-bottom: 4px;">$${p.selling_price.toFixed(2)}</div>
+        <div style="font-size: 1.15rem; font-weight: 800; color: var(--primary); margin-bottom: 4px;">${currencySymbol}${p.selling_price.toFixed(2)}</div>
         <span style="font-size: 0.75rem; color: ${(p.stock || 0) < p.min_stock_alert ? 'var(--alert)' : 'var(--text-muted)'}; display: block; margin-bottom: 12px; font-weight: 600;">Stock: ${p.stock || 0}</span>
       </div>
       <button style="width: 100%; padding: 10px; background-color: var(--primary); color: white; border: none; border-radius: var(--radius-sm); font-family: var(--font-family); font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.85rem;">
@@ -756,9 +764,9 @@ function recalculateCart() {
         <p style="font-weight: 600; font-size: 0.95rem;">Your cart is empty</p>
       </div>
     `;
-    document.getElementById('cartSubtotal').innerText = '$0.00';
-    document.getElementById('cartTax').innerText = '$0.00';
-    document.getElementById('cartGrandTotal').innerText = '$0.00';
+    document.getElementById('cartSubtotal').innerText = `${currencySymbol}0.00`;
+    document.getElementById('cartTax').innerText = `${currencySymbol}0.00`;
+    document.getElementById('cartGrandTotal').innerText = `${currencySymbol}0.00`;
     return;
   }
 
@@ -781,11 +789,11 @@ function recalculateCart() {
         <span style="font-size: 0.7rem; color: #64748b; font-family: monospace;">SKU: ${item.sku || 'N/A'}</span>
         ${coverageText}
       </div>
-      <div style="text-align: right; color: #334155; font-weight: 600; font-size: 0.85rem;">$${item.unit_price.toFixed(2)}</div>
+      <div style="text-align: right; color: #334155; font-weight: 600; font-size: 0.85rem;">${currencySymbol}${item.unit_price.toFixed(2)}</div>
       <div style="text-align: center;">
         <input type="number" value="${item.quantity}" min="1" onchange="updateCartQty(${index}, this.value)" style="width: 42px; text-align: center; padding: 4px 2px; border-radius: 4px; border: 1px solid #cbd5e1; font-weight: 700; font-size: 0.85rem; color: #0f172a; background: #f8fafc;">
       </div>
-      <div style="text-align: right; font-weight: 800; color: #2563eb; font-size: 0.85rem;">$${rowTotal.toFixed(2)}</div>
+      <div style="text-align: right; font-weight: 800; color: #2563eb; font-size: 0.85rem;">${currencySymbol}${rowTotal.toFixed(2)}</div>
       <div style="text-align: right;">
         <button onclick="removeFromCart(${index})" style="background: #fef2f2; border: 1px solid #fee2e2; color: #dc2626; cursor: pointer; padding: 5px 7px; border-radius: 4px; transition: all 0.2s;" title="Remove Item"><i class="fa-solid fa-trash-can" style="font-size: 0.75rem;"></i></button>
       </div>
@@ -797,9 +805,9 @@ function recalculateCart() {
   const tax = (subtotal - discount) * 0.1;
   const grandTotal = subtotal - discount + tax;
 
-  document.getElementById('cartSubtotal').innerText = `$${subtotal.toFixed(2)}`;
-  document.getElementById('cartTax').innerText = `$${tax.toFixed(2)}`;
-  document.getElementById('cartGrandTotal').innerText = `$${grandTotal.toFixed(2)}`;
+  document.getElementById('cartSubtotal').innerText = `${currencySymbol}${subtotal.toFixed(2)}`;
+  document.getElementById('cartTax').innerText = `${currencySymbol}${tax.toFixed(2)}`;
+  document.getElementById('cartGrandTotal').innerText = `${currencySymbol}${grandTotal.toFixed(2)}`;
 }
 
 function updateCartQty(index, value) {
@@ -1094,7 +1102,7 @@ function loadInventoryTable() {
       <td>${cat}</td>
       <td><span class="tag">${p.material || 'N/A'}</span> <span class="tag">${p.finish || 'N/A'}</span></td>
       <td><code>${p.shade_lot_number || 'N/A'}</code></td>
-      <td>Cost: $${(p.cost_price || 0).toFixed(2)}<br><span style="font-weight:700">Sell: $${(p.selling_price || 0).toFixed(2)}</span></td>
+      <td>Cost: ${currencySymbol}${(p.cost_price || 0).toFixed(2)}<br><span style="font-weight:700">Sell: ${currencySymbol}${(p.selling_price || 0).toFixed(2)}</span></td>
       <td>
         <span class="stock-pill ${(p.stock || 0) < p.min_stock_alert ? 'low' : 'ok'}">${p.stock || 0} ${p.uom}s</span>
       </td>
@@ -1542,7 +1550,7 @@ function renderFilteredInventoryTable(filteredProducts) {
       <td>${cat}</td>
       <td><span class="tag">${p.material || 'N/A'}</span> <span class="tag">${p.finish || 'N/A'}</span></td>
       <td><code>${p.shade_lot_number || 'N/A'}</code></td>
-      <td>Cost: $${p.cost_price.toFixed(2)}<br><span style="font-weight:700">Sell: $${p.selling_price.toFixed(2)}</span></td>
+      <td>Cost: ${currencySymbol}${(p.cost_price || 0).toFixed(2)}<br><span style="font-weight:700">Sell: ${currencySymbol}${(p.selling_price || 0).toFixed(2)}</span></td>
       <td>
         <span class="stock-pill ${(p.stock || 0) < p.min_stock_alert ? 'low' : 'ok'}">${p.stock || 0} ${p.uom}s</span>
       </td>
@@ -2402,7 +2410,7 @@ function loadSalesPage() {
       <td>${dateStr}</td>
       <td>—</td>
       <td><span class="badge-pay">${sale.payment_method}</span></td>
-      <td><strong>$${sale.total.toFixed(2)}</strong></td>
+      <td><strong>${currencySymbol}${sale.total.toFixed(2)}</strong></td>
       <td><span class="status-badge completed">Completed</span></td>
       <td>
         <button class="action-btn-sm" onclick="downloadInvoice(${sale.id})"><i class="fa-solid fa-file-pdf"></i> PDF</button>
@@ -3178,8 +3186,8 @@ function loadCustomerLedger() {
         <span style="font-weight:600;">${c.phone || 'N/A'}</span><br>
         <span style="font-size:0.75rem; color:var(--ink-muted);">${c.email || 'No email'}</span>
       </td>
-      <td style="font-weight:700; color:var(--ink);">$${Number(c.credit_limit || 0).toFixed(2)}</td>
-      <td style="font-weight:800; color:${Number(c.balance || 0) > 0 ? '#dc2626' : '#16a34a'};">$${Number(c.balance || 0).toFixed(2)}</td>
+      <td style="font-weight:700; color:var(--ink);">${currencySymbol}${Number(c.credit_limit || 0).toFixed(2)}</td>
+      <td style="font-weight:800; color:${Number(c.balance || 0) > 0 ? '#dc2626' : '#16a34a'};">${currencySymbol}${Number(c.balance || 0).toFixed(2)}</td>
       <td>
         <span style="font-size:0.75rem; font-weight:800; text-transform:uppercase; color:${tierColor}; background:${tierBg}; padding:4px 10px; border-radius:12px; display:inline-block;"><i class="fa-solid fa-award"></i> ${tier}</span>
       </td>
