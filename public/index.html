@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>POS Inventia - Modern Point of Sale & Inventory Management</title>
+  <title>Inventia - Workspace Business Operating System</title>
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,79 +23,121 @@
   <aside class="sidebar">
     <div class="sidebar-header">
       <div class="logo-wrapper">
-        <i class="fa-solid fa-cash-register logo-icon"></i>
+        <i class="fa-solid fa-sparkles logo-icon"></i>
       </div>
       <div>
         <h1 class="logo-title">Inventia</h1>
-        <span class="logo-subtitle">Point of Sale</span>
+        <span class="logo-subtitle">Business OS</span>
       </div>
+    </div>
+
+    <button class="workspace-switcher" type="button" onclick="toggleWorkspaceMenu(event)" aria-expanded="false">
+      <span class="workspace-avatar">NI</span>
+      <span class="workspace-copy">
+        <strong>Northwind Interiors</strong>
+        <small>Primary workspace</small>
+      </span>
+      <i class="fa-solid fa-chevron-down"></i>
+    </button>
+    <div class="workspace-menu" id="workspaceMenu">
+      <button type="button" class="active" onclick="selectWorkspace('Northwind Interiors', 'Primary workspace')"><span>NI</span> Northwind Interiors <i class="fa-solid fa-check"></i></button>
+      <button type="button" onclick="selectWorkspace('Studio Retail', 'Sandbox workspace')"><span>SR</span> Studio Retail</button>
+      <button type="button" class="workspace-create" onclick="showToast('Workspace creation is ready to configure.', 'info')"><i class="fa-solid fa-plus"></i> Create workspace</button>
     </div>
     
     <nav class="nav-menu">
+      <p class="nav-section-label">Workspace</p>
       <button class="nav-btn active" data-tab="dashboard">
-        <i class="fa-solid fa-gauge-high"></i> Dashboard
-        <span class="nav-badge new">New</span>
+        <i class="fa-solid fa-house"></i> Home
       </button>
-      <button class="nav-btn" data-tab="pos">
-        <i class="fa-solid fa-cart-shopping"></i> Point of Sale
-        <span class="nav-badge hot">Hot</span>
-      </button>
-      <button class="nav-btn" data-tab="sales-page">
-        <i class="fa-solid fa-list-check"></i> Sales Page
-      </button>
-      <!-- Products Dropdown -->
-      <div class="nav-dropdown-wrapper" id="dropdownProducts">
+      <div class="nav-dropdown-wrapper" id="dropdownOperations">
         <button class="nav-btn nav-dropdown-trigger">
-          <i class="fa-solid fa-box-archive"></i> Products <i class="fa-solid fa-chevron-down caret"></i>
+          <i class="fa-solid fa-bolt"></i> Operations <i class="fa-solid fa-chevron-down caret"></i>
+        </button>
+        <div class="nav-dropdown-content">
+          <button class="nav-dropdown-item" data-tab="sales-page">
+            <i class="fa-solid fa-receipt"></i> Orders
+          </button>
+          <button class="nav-dropdown-item" data-tab="pos">
+            <i class="fa-solid fa-cart-shopping"></i> Sales
+          </button>
+          <button class="nav-dropdown-item" data-tab="purchases">
+            <i class="fa-solid fa-bag-shopping"></i> Purchases
+          </button>
+          <button class="nav-dropdown-item" data-tab="customers">
+            <i class="fa-solid fa-users"></i> Customers
+          </button>
+          <button class="nav-dropdown-item" data-tab="suppliers">
+            <i class="fa-solid fa-truck-field"></i> Suppliers
+          </button>
+          <button class="nav-dropdown-item" data-tab="finance">
+            <i class="fa-solid fa-credit-card"></i> Payments
+          </button>
+          <button class="nav-dropdown-item" data-tab="finance">
+            <i class="fa-solid fa-wallet"></i> Expenses
+          </button>
+        </div>
+      </div>
+      <div class="nav-dropdown-wrapper" id="dropdownInventory">
+        <button class="nav-btn nav-dropdown-trigger">
+          <i class="fa-solid fa-boxes-stacked"></i> Inventory <i class="fa-solid fa-chevron-down caret"></i>
         </button>
         <div class="nav-dropdown-content">
           <button class="nav-dropdown-item" data-tab="inventory">
-            <i class="fa-solid fa-boxes-stacked"></i> Products List
+            <i class="fa-solid fa-cube"></i> Products
           </button>
-          <button class="nav-dropdown-item" data-tab="brands-categories">
-            <i class="fa-solid fa-tags"></i> Categories & Brands
+          <button class="nav-dropdown-item" data-tab="transfers">
+            <i class="fa-solid fa-arrow-right-arrow-left"></i> Stock Movement
           </button>
-          <button class="nav-dropdown-item" data-tab="warehouses-locations">
-            <i class="fa-solid fa-warehouse"></i> Warehouse & Locations
+          <button class="nav-dropdown-item" data-tab="transfers">
+            <i class="fa-solid fa-truck-ramp-box"></i> Stock Transfer
           </button>
         </div>
       </div>
-
-      <button class="nav-btn" data-tab="customers">
-        <i class="fa-solid fa-users"></i> Customers
-      </button>
-
-      <button class="nav-btn" data-tab="transfers">
-        <i class="fa-solid fa-boxes-stacked"></i> Inventory
-        <span class="nav-badge count">1</span>
-      </button>
-
-      <!-- Reports Dropdown -->
-      <div class="nav-dropdown-wrapper" id="dropdownReports">
+      <div class="nav-dropdown-wrapper" id="dropdownFinance">
         <button class="nav-btn nav-dropdown-trigger">
-          <i class="fa-solid fa-chart-pie"></i> Reports <i class="fa-solid fa-chevron-down caret"></i>
+          <i class="fa-solid fa-indian-rupee-sign"></i> Finance <i class="fa-solid fa-chevron-down caret"></i>
         </button>
         <div class="nav-dropdown-content">
-          <button class="nav-dropdown-item" data-tab="reports" data-report-type="sales">
-            <i class="fa-solid fa-chart-line"></i> Sales Report
-          </button>
-          <button class="nav-dropdown-item" data-tab="reports" data-report-type="stock">
-            <i class="fa-solid fa-warehouse"></i> Inventory Report
-          </button>
-          <button class="nav-dropdown-item" data-tab="reports" data-report-type="cust">
-            <i class="fa-solid fa-users"></i> Customers Report
-          </button>
+          <button class="nav-dropdown-item" data-tab="finance"><i class="fa-solid fa-file-invoice"></i> Invoices</button>
+          <button class="nav-dropdown-item" data-tab="finance"><i class="fa-solid fa-money-bill-transfer"></i> Cash Flow</button>
+          <button class="nav-dropdown-item" data-tab="finance"><i class="fa-solid fa-building-columns"></i> Reconciliation</button>
         </div>
       </div>
-
-      <button class="nav-btn" data-tab="staff">
-        <i class="fa-solid fa-user-gear"></i> User Management
+      <div class="nav-dropdown-wrapper" id="dropdownCrm">
+        <button class="nav-btn nav-dropdown-trigger">
+          <i class="fa-solid fa-handshake"></i> CRM <i class="fa-solid fa-chevron-down caret"></i>
+        </button>
+        <div class="nav-dropdown-content">
+          <button class="nav-dropdown-item" data-tab="crm"><i class="fa-solid fa-bullseye"></i> Leads</button>
+          <button class="nav-dropdown-item" data-tab="customers"><i class="fa-solid fa-users"></i> Customers</button>
+          <button class="nav-dropdown-item" data-tab="crm"><i class="fa-solid fa-arrows-rotate"></i> Follow-ups</button>
+          <button class="nav-dropdown-item" data-tab="crm"><i class="fa-solid fa-briefcase"></i> Deals</button>
+        </div>
+      </div>
+      <div class="nav-dropdown-wrapper" id="dropdownTeam">
+        <button class="nav-btn nav-dropdown-trigger">
+          <i class="fa-solid fa-user-group"></i> Team <i class="fa-solid fa-chevron-down caret"></i>
+        </button>
+        <div class="nav-dropdown-content">
+          <button class="nav-dropdown-item" data-tab="staff"><i class="fa-solid fa-id-badge"></i> Employees</button>
+          <button class="nav-dropdown-item" data-tab="staff"><i class="fa-solid fa-shield-halved"></i> Roles</button>
+          <button class="nav-dropdown-item" data-tab="staff"><i class="fa-solid fa-clock"></i> Attendance</button>
+        </div>
+      </div>
+      <p class="nav-section-label nav-section-secondary">Tools</p>
+      <button class="nav-btn" data-tab="reports">
+        <i class="fa-solid fa-chart-simple"></i> Analytics
+      </button>
+      <button class="nav-btn" data-tab="automation">
+        <i class="fa-solid fa-wand-magic-sparkles"></i> Automation
+        <span class="nav-badge new">New</span>
+      </button>
+      <button class="nav-btn" data-tab="marketplace">
+        <i class="fa-solid fa-store"></i> Marketplace
       </button>
       <button class="nav-btn" data-tab="settings-tab">
-        <i class="fa-solid fa-gear"></i> Billing Settings
-      </button>
-      <button class="nav-btn" data-tab="backup-tab">
-        <i class="fa-solid fa-database"></i> Backup & Restore
+        <i class="fa-solid fa-gear"></i> Settings
       </button>
       <button class="nav-btn logout-btn" onclick="logout()">
         <i class="fa-solid fa-right-from-bracket"></i> Logout
@@ -120,7 +162,7 @@
     <!-- Top Header Bar -->
     <header class="header-bar">
       <div class="header-brand">
-        <span class="brand-pill">POS</span>
+        <span class="brand-pill">WORKSPACE</span>
         <span class="brand-name">Inventia</span>
       </div>
       <div class="header-actions">
@@ -862,12 +904,38 @@
     <section id="settings-tab" class="tab-panel">
       <div class="panel-header">
         <div>
-          <h2>App Settings</h2>
-          <p>Global parameters for billing details, tax rate, and logo text</p>
+          <p class="eyebrow">Workspace administration</p>
+          <h2>Settings</h2>
+          <p>Configure your organization, preferences, security, and connected tools from one place.</p>
         </div>
       </div>
 
-      <div class="grid-panel" style="max-width: 700px; margin: 0 auto;">
+      <div class="settings-shell">
+        <aside class="settings-nav" aria-label="Settings categories">
+          <div class="settings-nav-head">
+            <span>Settings</span>
+            <small>13 categories</small>
+          </div>
+          <button class="settings-nav-item active" data-settings-section="organization"><i class="fa-solid fa-building"></i> Organization</button>
+          <button class="settings-nav-item" data-settings-section="users"><i class="fa-solid fa-users-gear"></i> Users &amp; Permissions</button>
+          <button class="settings-nav-item" data-settings-section="products"><i class="fa-solid fa-boxes-stacked"></i> Products &amp; Inventory</button>
+          <button class="settings-nav-item" data-settings-section="sales"><i class="fa-solid fa-cart-shopping"></i> Sales</button>
+          <button class="settings-nav-item" data-settings-section="purchases"><i class="fa-solid fa-bag-shopping"></i> Purchases</button>
+          <button class="settings-nav-item" data-settings-section="finance"><i class="fa-solid fa-wallet"></i> Finance</button>
+          <button class="settings-nav-item" data-settings-section="documents"><i class="fa-solid fa-file-lines"></i> Documents &amp; Printing</button>
+          <button class="settings-nav-item" data-settings-section="notifications"><i class="fa-solid fa-bell"></i> Notifications</button>
+          <button class="settings-nav-item" data-settings-section="integrations"><i class="fa-solid fa-plug"></i> Integrations</button>
+          <button class="settings-nav-item" data-settings-section="ai"><i class="fa-solid fa-sparkles"></i> AI</button>
+          <button class="settings-nav-item" data-settings-section="security"><i class="fa-solid fa-shield-halved"></i> Security</button>
+          <button class="settings-nav-item" data-settings-section="subscription"><i class="fa-solid fa-credit-card"></i> Subscription</button>
+          <button class="settings-nav-item" data-settings-section="help"><i class="fa-solid fa-circle-question"></i> Help &amp; About</button>
+        </aside>
+
+        <div class="settings-workspace-pane">
+          <div id="settingsModuleOverview" class="settings-module-overview" aria-live="polite"></div>
+
+          <div id="settingsOrganizationForm" class="settings-managed-content">
+      <div class="grid-panel settings-form-card">
         <h4>Global Parameters Configuration</h4>
         <form id="settingsForm" class="panel-form" onsubmit="submitSettings(event)" style="margin-top: 20px;">
           <div class="form-row">
@@ -990,7 +1058,10 @@
         </form>
       </div>
 
-      <div class="grid-panel" style="max-width: 700px; margin: 24px auto 0; padding: 20px;">
+      </div>
+
+      <div id="settingsAiForm" class="settings-managed-content">
+      <div class="grid-panel settings-form-card" style="margin-top: 24px; padding: 20px;">
         <h4>AI Agent API Configuration</h4>
         <form id="aiSettingsForm" class="panel-form" onsubmit="submitAiSettings(event)" style="margin-top: 20px;">
           <div class="form-row">
@@ -1023,6 +1094,9 @@
           </div>
           <button type="submit" class="submit-form-btn" style="background-color: var(--violet-600);">Save AI Agent Integration</button>
         </form>
+      </div>
+      </div>
+        </div>
       </div>
     </section>
 
@@ -1298,6 +1372,84 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </section>
+
+    <!-- WORKSPACE: Purchases -->
+    <section id="purchases" class="tab-panel workspace-page">
+      <div class="workspace-page-hero">
+        <div class="workspace-page-icon amber"><i class="fa-solid fa-bag-shopping"></i></div>
+        <div><p class="eyebrow">Operations workspace</p><h2>Purchases</h2><p>Track purchase orders, vendor activity, approvals, and returns in one operational flow.</p></div>
+        <button class="action-btn primary" onclick="showToast('Purchase order creation is ready to configure.', 'info')"><i class="fa-solid fa-plus"></i> New purchase order</button>
+      </div>
+      <div class="workspace-feature-grid">
+        <button class="workspace-feature-card" onclick="openSettingsSection('purchases')"><i class="fa-solid fa-file-circle-check"></i><strong>Purchase Orders</strong><span>Create, approve, and follow supplier orders.</span></button>
+        <button class="workspace-feature-card" onclick="switchTab('suppliers')"><i class="fa-solid fa-truck-field"></i><strong>Suppliers</strong><span>Maintain vendor records and defaults.</span></button>
+        <button class="workspace-feature-card" onclick="openSettingsSection('purchases')"><i class="fa-solid fa-arrow-right-arrow-left"></i><strong>Purchase Returns</strong><span>Manage credits and returned stock.</span></button>
+      </div>
+    </section>
+
+    <!-- WORKSPACE: Suppliers -->
+    <section id="suppliers" class="tab-panel workspace-page">
+      <div class="workspace-page-hero">
+        <div class="workspace-page-icon teal"><i class="fa-solid fa-truck-field"></i></div>
+        <div><p class="eyebrow">Operations workspace</p><h2>Suppliers</h2><p>Manage vendors, pricing terms, purchasing history, and communication.</p></div>
+        <button class="action-btn primary" onclick="showToast('Supplier onboarding is ready to configure.', 'info')"><i class="fa-solid fa-user-plus"></i> Add supplier</button>
+      </div>
+      <div class="workspace-empty-state"><i class="fa-solid fa-people-arrows"></i><h3>Supplier operations, in context</h3><p>Vendor records will connect directly to purchase orders, payment terms, and purchase returns.</p><button class="action-btn secondary" onclick="openSettingsSection('purchases')">Configure vendor defaults</button></div>
+    </section>
+
+    <!-- WORKSPACE: Finance -->
+    <section id="finance" class="tab-panel workspace-page">
+      <div class="workspace-page-hero">
+        <div class="workspace-page-icon green"><i class="fa-solid fa-wallet"></i></div>
+        <div><p class="eyebrow">Finance workspace</p><h2>Finance</h2><p>Bring invoicing, tax, payments, banks, and cash flow together without leaving the workspace.</p></div>
+        <button class="action-btn primary" onclick="switchTab('sales-page')"><i class="fa-solid fa-file-invoice"></i> View invoices</button>
+      </div>
+      <div class="workspace-feature-grid four-col">
+        <button class="workspace-feature-card" onclick="switchTab('sales-page')"><i class="fa-solid fa-file-invoice"></i><strong>Invoices</strong><span>Issue and track customer invoices.</span></button>
+        <button class="workspace-feature-card" onclick="openSettingsSection('finance')"><i class="fa-solid fa-receipt"></i><strong>Tax &amp; GST</strong><span>Set taxation and reporting defaults.</span></button>
+        <button class="workspace-feature-card" onclick="openSettingsSection('finance')"><i class="fa-solid fa-building-columns"></i><strong>Bank Accounts</strong><span>Connect accounts and reconcile activity.</span></button>
+        <button class="workspace-feature-card" onclick="switchTab('reports')"><i class="fa-solid fa-chart-line"></i><strong>Cash Flow</strong><span>Understand income and expenditure trends.</span></button>
+      </div>
+    </section>
+
+    <!-- WORKSPACE: CRM -->
+    <section id="crm" class="tab-panel workspace-page">
+      <div class="workspace-page-hero">
+        <div class="workspace-page-icon violet"><i class="fa-solid fa-handshake"></i></div>
+        <div><p class="eyebrow">Customer workspace</p><h2>CRM</h2><p>Turn every inquiry into a coordinated, trackable customer relationship.</p></div>
+        <button class="action-btn primary" onclick="showToast('Lead capture is ready to configure.', 'info')"><i class="fa-solid fa-plus"></i> Add lead</button>
+      </div>
+      <div class="workspace-feature-grid">
+        <button class="workspace-feature-card" onclick="showToast('Leads are ready to configure.', 'info')"><i class="fa-solid fa-bullseye"></i><strong>Leads</strong><span>Qualify new sales opportunities.</span></button>
+        <button class="workspace-feature-card" onclick="switchTab('customers')"><i class="fa-solid fa-users"></i><strong>Customers</strong><span>View customer and credit information.</span></button>
+        <button class="workspace-feature-card" onclick="showToast('Follow-up automation is ready to configure.', 'info')"><i class="fa-solid fa-comments"></i><strong>Follow-ups</strong><span>Plan the next best customer action.</span></button>
+      </div>
+    </section>
+
+    <!-- WORKSPACE: Automation -->
+    <section id="automation" class="tab-panel workspace-page">
+      <div class="workspace-page-hero">
+        <div class="workspace-page-icon blue"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+        <div><p class="eyebrow">Intelligent workspace</p><h2>Automation</h2><p>Design rules that keep your business moving while your team focuses on customers.</p></div>
+        <button class="action-btn primary" onclick="openSettingsSection('ai')"><i class="fa-solid fa-plus"></i> Create automation</button>
+      </div>
+      <div class="workspace-empty-state"><i class="fa-solid fa-robot"></i><h3>Start with a business moment</h3><p>Automate low stock alerts, payment reminders, approvals, and follow-up tasks using settings built for your workspace.</p><button class="action-btn secondary" onclick="openSettingsSection('ai')">Manage AI &amp; automation rules</button></div>
+    </section>
+
+    <!-- WORKSPACE: Marketplace -->
+    <section id="marketplace" class="tab-panel workspace-page">
+      <div class="workspace-page-hero">
+        <div class="workspace-page-icon rose"><i class="fa-solid fa-store"></i></div>
+        <div><p class="eyebrow">Connected workspace</p><h2>Marketplace</h2><p>Extend Inventia with payment, storefront, accounting, and communication integrations.</p></div>
+        <button class="action-btn primary" onclick="openSettingsSection('integrations')"><i class="fa-solid fa-plug"></i> Browse integrations</button>
+      </div>
+      <div class="workspace-feature-grid four-col">
+        <button class="workspace-feature-card" onclick="openSettingsSection('integrations')"><i class="fa-brands fa-whatsapp"></i><strong>WhatsApp</strong><span>Customer notifications and updates.</span></button>
+        <button class="workspace-feature-card" onclick="openSettingsSection('integrations')"><i class="fa-solid fa-credit-card"></i><strong>Payments</strong><span>Razorpay and PhonePe connections.</span></button>
+        <button class="workspace-feature-card" onclick="openSettingsSection('integrations')"><i class="fa-solid fa-cart-plus"></i><strong>Commerce</strong><span>Shopify and WooCommerce storefronts.</span></button>
+        <button class="workspace-feature-card" onclick="openSettingsSection('integrations')"><i class="fa-solid fa-code"></i><strong>Developer API</strong><span>Keys, webhooks, and custom flows.</span></button>
       </div>
     </section>
 

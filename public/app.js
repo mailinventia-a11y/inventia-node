@@ -3,6 +3,31 @@ let currentTab = 'dashboard';
 let cart = [];
 let calculatorMode = 'dims';
 let activeCalculatorProduct = null;
+
+const settingsModules = {
+  organization: { icon: 'fa-building', title: 'Organization', description: 'Company identity, operating locations, and regional defaults for this workspace.', items: ['Company Profile', 'Branches', 'Warehouses', 'Financial Year', 'Currency', 'Time Zone'] },
+  users: { icon: 'fa-users-gear', title: 'Users & Permissions', description: 'Control who can access the workspace and what they can do.', items: ['Users', 'Roles', 'Permissions', 'Teams', 'Activity Logs'] },
+  products: { icon: 'fa-boxes-stacked', title: 'Products & Inventory', description: 'Standardize the product information and inventory rules your team uses every day.', items: ['Units of Measure', 'Categories', 'Brands', 'Taxes', 'Barcode & QR', 'Batch & Expiry', 'Serial Numbers', 'Reorder Rules'] },
+  sales: { icon: 'fa-cart-shopping', title: 'Sales', description: 'Set the defaults behind quotations, orders, invoicing, payments, and returns.', items: ['Invoice Settings', 'Quotation Settings', 'Order Settings', 'Payment Terms', 'Delivery Settings', 'Return Policy'] },
+  purchases: { icon: 'fa-bag-shopping', title: 'Purchases', description: 'Configure purchase-order controls, vendor defaults, approvals, and returns.', items: ['Purchase Order Settings', 'Vendor Defaults', 'Approval Workflow', 'Purchase Returns'] },
+  finance: { icon: 'fa-wallet', title: 'Finance', description: 'Manage tax, payments, banking, numbering, and accounting defaults.', items: ['Tax & GST', 'Bank Accounts', 'Payment Methods', 'Payment Gateways', 'Number Series', 'Accounting Defaults'] },
+  documents: { icon: 'fa-file-lines', title: 'Documents & Printing', description: 'Make every printed or digital document match your business.', items: ['Invoice Templates', 'Thermal Printing', 'Barcode Labels', 'Packing Slips', 'Delivery Challans', 'Company Logo', 'Digital Signature', 'Terms & Conditions'] },
+  notifications: { icon: 'fa-bell', title: 'Notifications', description: 'Choose where important business events should reach your customers and team.', items: ['Email', 'SMS', 'WhatsApp', 'Push Notifications', 'Payment Reminders', 'Low Stock Alerts'] },
+  integrations: { icon: 'fa-plug', title: 'Integrations', description: 'Connect payment, commerce, accounting, messaging, and developer tools.', items: ['WhatsApp', 'Razorpay', 'PhonePe', 'Tally', 'Shopify', 'WooCommerce', 'API Keys', 'Webhooks'] },
+  ai: { icon: 'fa-sparkles', title: 'AI', description: 'Tune your AI assistant, automation rules, access controls, and audit history.', items: ['AI Assistant', 'Automation Rules', 'AI Permissions', 'AI History'] },
+  security: { icon: 'fa-shield-halved', title: 'Security', description: 'Protect workspace access, sessions, backups, exports, and audit trails.', items: ['Change Password', 'Two-Factor Authentication', 'Login Sessions', 'Backup & Restore', 'Data Export', 'Audit Logs'] },
+  subscription: { icon: 'fa-credit-card', title: 'Subscription', description: 'Review plan details, billing, limits, invoices, and upgrade options.', items: ['Current Plan', 'Billing', 'Usage', 'Invoices', 'Upgrade Plan'] },
+  help: { icon: 'fa-circle-question', title: 'Help & About', description: 'Find support, product updates, guidance, and information about Inventia.', items: ['Help Center', 'Contact Support', 'Report a Bug', 'Feature Requests', 'Keyboard Shortcuts', 'Changelog', 'About Inventia'] }
+};
+
+const settingsDestinations = {
+  'Users': 'staff', 'Roles': 'staff', 'Permissions': 'staff', 'Teams': 'staff', 'Activity Logs': 'staff',
+  'Warehouses': 'warehouses-locations', 'Categories': 'brands-categories', 'Brands': 'brands-categories',
+  'Barcode & QR': 'inventory', 'Batch & Expiry': 'inventory', 'Reorder Rules': 'inventory',
+  'Invoice Settings': 'sales-page', 'Order Settings': 'sales-page', 'Backup & Restore': 'backup-tab',
+  'Invoices': 'sales-page'
+};
+let settingsNavigationInitialized = false;
 let currencySymbol = '₹';
 let currencyCode = 'INR';
 
@@ -243,14 +268,15 @@ function updateProfileUI() {
     btn.style.display = '';
 
     const tab = btn.getAttribute('data-tab');
-    const isReports = btn.id === 'dropdownReports';
+    const containsRestrictedTeamTools = btn.querySelector?.('[data-tab="staff"]');
+    const isAnalytics = tab === 'reports';
 
     if (role === 'manager') {
-      if (tab === 'staff' || tab === 'settings-tab' || tab === 'backup-tab') {
+      if (tab === 'settings-tab' || containsRestrictedTeamTools) {
         btn.style.display = 'none';
       }
     } else if (role === 'cashier' || role === 'warehouse_staff') {
-      if (tab === 'staff' || tab === 'settings-tab' || tab === 'backup-tab' || isReports) {
+      if (tab === 'settings-tab' || containsRestrictedTeamTools || isAnalytics) {
         btn.style.display = 'none';
       }
     }
@@ -339,6 +365,8 @@ function logout() {
 
 function initializePOSApp() {
   setupNavigation();
+  initializeSettingsNavigation();
+  initializeWorkspaceSwitcher();
   loadDashboardData();
   loadPOSCatalog();
   renderPOSCategoryFilters();
@@ -365,7 +393,110 @@ function initializePOSApp() {
     })
     .catch(e => {
       console.log('Running in local browser simulator mode. Set up Supabase credentials in .env to use live DB.');
+  });
+}
+
+function initializeSettingsNavigation() {
+  if (!settingsNavigationInitialized) {
+    document.querySelectorAll('.settings-nav-item').forEach(button => {
+      button.addEventListener('click', () => selectSettingsSection(button.dataset.settingsSection));
     });
+    settingsNavigationInitialized = true;
+  }
+  selectSettingsSection(document.querySelector('.settings-nav-item.active')?.dataset.settingsSection || 'organization');
+}
+
+function selectSettingsSection(section) {
+  const module = settingsModules[section] || settingsModules.organization;
+  const overview = document.getElementById('settingsModuleOverview');
+  if (!overview) return;
+
+  document.querySelectorAll('.settings-nav-item').forEach(button => {
+    button.classList.toggle('active', button.dataset.settingsSection === section);
+  });
+
+  overview.innerHTML = `
+    <div class="settings-module-header">
+      <div class="settings-module-heading">
+        <span class="settings-module-icon"><i class="fa-solid ${module.icon}"></i></span>
+        <div><h3>${module.title}</h3><p>${module.description}</p></div>
+      </div>
+      <span class="settings-module-count">${module.items.length} settings</span>
+    </div>
+    <div class="settings-link-grid">
+      ${module.items.map(item => `<button class="settings-link-card" type="button" data-setting-name="${item}"><i class="fa-solid fa-arrow-up-right-from-square"></i><span>${item}</span><small>Configure ${item.toLowerCase()} for this workspace.</small></button>`).join('')}
+    </div>`;
+
+  overview.querySelectorAll('[data-setting-name]').forEach(button => {
+    button.addEventListener('click', () => openSettingsItem(button.dataset.settingName));
+  });
+
+  document.getElementById('settingsOrganizationForm')?.classList.toggle('active', section === 'organization');
+  document.getElementById('settingsAiForm')?.classList.toggle('active', section === 'ai');
+}
+
+function openSettingsItem(item) {
+  const target = settingsDestinations[item];
+  if (target) {
+    switchTab(target);
+    return;
+  }
+  showToast(`${item} is ready to configure in this workspace.`, 'info');
+}
+
+function openSettingsSection(section) {
+  switchTab('settings-tab');
+  selectSettingsSection(section);
+}
+
+function initializeWorkspaceSwitcher() {
+  const savedWorkspace = localStorage.getItem('inventia_workspace');
+  if (savedWorkspace) {
+    try {
+      const workspace = JSON.parse(savedWorkspace);
+      updateWorkspaceLabel(workspace.name, workspace.description);
+    } catch (_) {
+      localStorage.removeItem('inventia_workspace');
+    }
+  }
+  if (!document.body.dataset.workspaceListenerReady) {
+    document.addEventListener('click', event => {
+      if (!event.target.closest('.workspace-switcher') && !event.target.closest('.workspace-menu')) {
+        closeWorkspaceMenu();
+      }
+    });
+    document.body.dataset.workspaceListenerReady = 'true';
+  }
+}
+
+function toggleWorkspaceMenu(event) {
+  event.stopPropagation();
+  const menu = document.getElementById('workspaceMenu');
+  const trigger = document.querySelector('.workspace-switcher');
+  if (!menu || !trigger) return;
+  const opening = !menu.classList.contains('active');
+  menu.classList.toggle('active', opening);
+  trigger.setAttribute('aria-expanded', String(opening));
+}
+
+function closeWorkspaceMenu() {
+  document.getElementById('workspaceMenu')?.classList.remove('active');
+  document.querySelector('.workspace-switcher')?.setAttribute('aria-expanded', 'false');
+}
+
+function selectWorkspace(name, description) {
+  updateWorkspaceLabel(name, description);
+  localStorage.setItem('inventia_workspace', JSON.stringify({ name, description }));
+  document.querySelectorAll('.workspace-menu button').forEach(button => button.classList.toggle('active', button.textContent.includes(name)));
+  closeWorkspaceMenu();
+  showToast(`Switched to ${name}.`, 'success');
+}
+
+function updateWorkspaceLabel(name, description) {
+  const copy = document.querySelector('.workspace-copy');
+  const avatar = document.querySelector('.workspace-avatar');
+  if (copy) copy.innerHTML = `<strong>${name}</strong><small>${description}</small>`;
+  if (avatar) avatar.textContent = name.split(/\s+/).map(word => word[0]).join('').slice(0, 2).toUpperCase();
 }
 
 // Initialize UI
@@ -575,7 +706,7 @@ function setupNavigation() {
       }
 
       // Switch panels
-      switchTab(tabName, reportType);
+      switchTab(tabName, reportType, item);
 
       // If report type, select correct report sub-tab
       if (reportType) {
@@ -586,7 +717,7 @@ function setupNavigation() {
 }
 
 // Global switchTab helper (used by footer links, quick-action buttons, etc.)
-function switchTab(tabName, reportType = null) {
+function switchTab(tabName, reportType = null, sourceItem = null) {
   const targetPanel = document.getElementById(tabName);
   if (!targetPanel) return;
 
@@ -597,7 +728,7 @@ function switchTab(tabName, reportType = null) {
   // If reports tab, highlight based on report type
   if (tabName === 'reports') {
     const type = reportType || activeReport;
-    const matchingSub = document.querySelector(`.nav-dropdown-item[data-tab="reports"][data-report-type="${type}"]`);
+      const matchingSub = sourceItem || document.querySelector(`.nav-dropdown-item[data-tab="reports"][data-report-type="${type}"]`);
     if (matchingSub) {
       matchingSub.classList.add('active');
       const wrapper = matchingSub.closest('.nav-dropdown-wrapper');
@@ -613,7 +744,7 @@ function switchTab(tabName, reportType = null) {
       matchingBtn.classList.add('active');
     } else {
       // Highlight matching sub-item if it's inside a dropdown
-      const matchingSub = document.querySelector(`.nav-dropdown-item[data-tab="${tabName}"]`);
+      const matchingSub = sourceItem || document.querySelector(`.nav-dropdown-item[data-tab="${tabName}"]`);
       if (matchingSub) {
         matchingSub.classList.add('active');
         const wrapper = matchingSub.closest('.nav-dropdown-wrapper');
@@ -3454,5 +3585,3 @@ async function deleteCustomer(customerId) {
 
   await executeAction(null, actionFn, "Customer deleted successfully.", `Deleted customer profile "${custName}".`);
 }
-
-
