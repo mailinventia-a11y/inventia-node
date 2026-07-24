@@ -41,13 +41,9 @@ let customers = [
   { id: 2, name: 'Apex Builders', phone: '+1 555-9011', email: 'billing@apex.com', address: '45 Industrial Ave', credit_limit: 50000.00, balance: 14500.00, loyalty_points: 2450, tier: 'platinum' }
 ];
 
-let sales = [
-  { id: 1, invoice_no: 'INV-17112026', customer_id: 1, user_id: 1, subtotal: 329.90, discount: 29.90, tax_amount: 30.00, total: 330.00, payment_method: 'card', payment_status: 'completed', sale_date: new Date() }
-];
+let sales = [];
 
-let transfers = [
-  { id: 1, from: 'Main Warehouse', to: 'City Showroom', product: 'Carrara White Tile', qty: 20, status: 'completed' }
-];
+let transfers = [];
 
 let warehouses = [
   { id: 1, name: 'Main Warehouse', code: 'WH-MAIN', type: 'warehouse', address: '404 Logistics Boulevard, Sector 5' },
@@ -1253,7 +1249,20 @@ function toBase64(file) {
 // ================= MODULE 4: STOCK TRANSFERS =================
 function loadTransferLogs() {
   const table = document.getElementById('transferLogTable');
+  if (!table) return;
   table.innerHTML = '';
+  
+  if (transfers.length === 0) {
+    table.innerHTML = `
+      <tr>
+        <td colspan="4" style="text-align: center; color: var(--ink-muted); padding: 24px; font-weight: 500;">
+          <i class="fa-solid fa-circle-info" style="margin-right: 6px;"></i> No stock transfers logged yet.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+  
   transfers.forEach(t => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
