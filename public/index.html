@@ -595,9 +595,14 @@
           <h2>Customer Account Ledgers</h2>
           <p>Monitor credit accounts, limits, outstanding balances, and loyalty status</p>
         </div>
-        <button class="action-btn primary" onclick="openCustomerModal()">
-          <i class="fa-solid fa-user-plus"></i> Add New Customer
-        </button>
+        <div style="display: flex; gap: 10px;">
+          <button class="action-btn primary" style="background: #10b981; border: 1px solid #10b981;" onclick="exportCustomersCSV()">
+            <i class="fa-solid fa-file-csv"></i> Export CSV
+          </button>
+          <button class="action-btn primary" onclick="openCustomerModal()">
+            <i class="fa-solid fa-user-plus"></i> Add New Customer
+          </button>
+        </div>
       </div>
 
       <div class="table-card">

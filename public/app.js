@@ -1491,6 +1491,41 @@ async function submitStockAdjustment(event) {
   }
 }
 
+function exportCustomersCSV() {
+  if (customers.length === 0) {
+    alert("No customer records found to export.");
+    return;
+  }
+
+  const headers = ["Customer ID", "Name", "Phone", "Email", "Address", "Credit Limit", "Current Balance", "Loyalty Points", "Tier"];
+  const rows = customers.map(c => [
+    `CUST-${c.id}`,
+    c.name,
+    c.phone || '',
+    c.email || '',
+    c.address ? c.address.replace(/\n/g, " ") : '',
+    (c.credit_limit || 0).toFixed(2),
+    (c.balance || 0).toFixed(2),
+    c.loyalty_points || 0,
+    c.tier || 'bronze'
+  ]);
+
+  const csvContent = [
+    headers.join(","),
+    ...rows.map(row => row.map(val => `"${val.toString().replace(/"/g, '""')}"`).join(","))
+  ].join("\n");
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `inventia_customers_export_${new Date().toISOString().split('T')[0]}.csv`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 // Submit Customer Form
 async function submitNewCustomer(event) {
   event.preventDefault();
