@@ -93,9 +93,22 @@ router.get('/products', async (req, res) => {
       });
     }
 
+    // Fetch all sales quantities from sale_items to aggregate sales_count
+    const { data: salesData } = await supabase
+      .from('sale_items')
+      .select('product_id, quantity');
+
+    const salesMap = {};
+    if (salesData) {
+      salesData.forEach(item => {
+        salesMap[item.product_id] = (salesMap[item.product_id] || 0) + item.quantity;
+      });
+    }
+
     const productsWithStock = data.map(p => ({
       ...p,
-      stock: stockMap[p.id] || 0
+      stock: stockMap[p.id] || 0,
+      sales_count: salesMap[p.id] || 0
     }));
 
     res.json(productsWithStock);

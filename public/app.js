@@ -448,14 +448,32 @@ function switchTab(tabName, reportType = null) {
 // ================= MODULE 1: DASHBOARD =================
 function loadDashboardData() {
   // KPI calculations
-  const totalValuation = products.reduce((acc, p) => acc + (p.cost_price * (p.stock || 10)), 0);
+  const totalValuation = products.reduce((acc, p) => acc + ((p.cost_price || 0) * (p.stock || 0)), 0);
   const lowStockCount = products.filter(p => (p.stock || 0) < p.min_stock_alert).length;
   
+  // Calculate Today's Sales & Revenue
+  const todayStr = new Date().toDateString();
+  const todaySales = sales.filter(s => new Date(s.sale_date).toDateString() === todayStr);
+  const todaySalesCount = todaySales.length;
+  const todayRevenue = todaySales.reduce((acc, s) => acc + (s.total || 0), 0);
+
+  // Update Top Cards
+  const elSales = document.getElementById('kpiSales');
+  if (elSales) elSales.innerText = todaySalesCount;
+  
+  const elRev = document.getElementById('kpiRevenue');
+  if (elRev) elRev.innerText = `$${todayRevenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
   const elVal = document.getElementById('kpiValuation');
   if (elVal) elVal.innerText = `$${totalValuation.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  
   const elLow = document.getElementById('kpiLowStock');
   if (elLow) elLow.innerText = `${lowStockCount} Products`;
+  
+  const elCustKpi = document.getElementById('kpiCustomers');
+  if (elCustKpi) elCustKpi.innerText = customers.length;
 
+  // Overall Information Info Grid
   const elCust = document.getElementById('dashboardCustomerCount');
   if (elCust) elCust.innerText = customers.length;
   const elOrd = document.getElementById('dashboardOrderCount');
@@ -465,24 +483,92 @@ function loadDashboardData() {
   
   // Render recent sales
   const recentTable = document.getElementById('recentSalesTable');
-  if (!recentTable) return;
-  recentTable.innerHTML = '';
-  sales.forEach(sale => {
-    const cust = customers.find(c => c.id === sale.customer_id)?.name || 'Walk-in';
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><strong>${sale.invoice_no}</strong></td>
-      <td>${cust}</td>
-      <td><span class="badge-pay">${sale.payment_method}</span></td>
-      <td>$${sale.total.toFixed(2)}</td>
-      <td>
-        <button class="action-btn-sm" onclick="downloadInvoice(${sale.id})"><i class="fa-solid fa-file-pdf"></i> PDF</button>
-      </td>
-    `;
-    recentTable.appendChild(tr);
-  });
+  if (recentTable) {
+    recentTable.innerHTML = '';
+    sales.forEach(sale => {
+      const cust = customers.find(c => c.id === sale.customer_id)?.name || 'Walk-in';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${sale.invoice_no}</strong></td>
+        <td>${cust}</td>
+        <td><span class="badge-pay">${sale.payment_method}</span></td>
+        <td>$${(sale.total || 0).toFixed(2)}</td>
+        <td>
+          <button class="action-btn-sm" onclick="downloadInvoice(${sale.id})"><i class="fa-solid fa-file-pdf"></i> PDF</button>
+        </td>
+      `;
+      recentTable.appendChild(tr);
+    });
+  }
 
-  // Render stock alerts
+  // Render Best Selling Products Table dynamically
+  const bestTable = document.getElementById('bestSellingTable');
+  if (bestTable) {
+    bestTable.innerHTML = '';
+    // Sort products by sales_count descending
+    const bestSelling = products
+      .filter(p => (p.sales_count || 0) > 0)
+      .sort((a, b) => (b.sales_count || 0) - (a.sales_count || 0));
+
+    if (bestSelling.length === 0) {
+      bestTable.innerHTML = `
+        <tr>
+          <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 20px;">
+            No sales recorded yet.
+          </td>
+        </tr>
+      `;
+    } else {
+      bestSelling.slice(0, 5).forEach(p => {
+        const photoUrl = p.image_url || 'https://images.unsplash.com/photo-1582176647444-f7b60e6f7734?w=400';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="display:flex; align-items:center; gap:10px;">
+            <img src="${photoUrl}" style="width:36px; height:36px; border-radius:6px; object-fit:cover;">
+            <strong>${p.name}</strong>
+          </td>
+          <td>$${(p.selling_price || 0).toFixed(2)}</td>
+          <td>${p.sales_count || 0}</td>
+          <td><span class="badge-growth">↑ 100%</span></td>
+        `;
+        bestTable.appendChild(tr);
+      });
+    }
+  }
+
+  // Render Low Stock Products Table dynamically
+  const lowStockTable = document.getElementById('lowStockTable');
+  if (lowStockTable) {
+    lowStockTable.innerHTML = '';
+    const lowStockProducts = products.filter(p => (p.stock || 0) < p.min_stock_alert);
+    
+    if (lowStockProducts.length === 0) {
+      lowStockTable.innerHTML = `
+        <tr>
+          <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 20px;">
+            No low stock alerts.
+          </td>
+        </tr>
+      `;
+    } else {
+      lowStockProducts.forEach(p => {
+        const photoUrl = p.image_url || 'https://images.unsplash.com/photo-1582176647444-f7b60e6f7734?w=400';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="display:flex; align-items:center; gap:10px;">
+            <img src="${photoUrl}" style="width:36px; height:36px; border-radius:6px; object-fit:cover;">
+            <strong>${p.name}</strong>
+          </td>
+          <td>#${p.id}</td>
+          <td>${p.stock || 0}</td>
+          <td><span class="stock-pill low">Low Stock</span></td>
+        `;
+        lowStockTable.appendChild(tr);
+      });
+    }
+  }
+
+  // Render stock alerts list
   const alertList = document.getElementById('lowStockAlertList');
   if (alertList) {
     alertList.innerHTML = '';
@@ -2929,7 +3015,14 @@ function renderDashboardCharts() {
   const weeklyCanvas = document.getElementById('weeklySalesChart');
   if (weeklyCanvas) {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const salesTotals = [1200, 1900, 3000, 2500, 4200, 5800, sales.reduce((a, s) => a + (s.total || 0), 0)];
+    const salesTotals = [0, 0, 0, 0, 0, 0, 0];
+    
+    sales.forEach(sale => {
+      let dayIndex = new Date(sale.sale_date).getDay() - 1; // 0 is Sunday, 1 is Monday, etc.
+      if (dayIndex === -1) dayIndex = 6; // Sunday
+      salesTotals[dayIndex] += (sale.total || 0);
+    });
+
     dashboardChartInstances.weekly = new Chart(weeklyCanvas, {
       type: 'bar',
       data: {
@@ -2953,8 +3046,14 @@ function renderDashboardCharts() {
   // 2. Top Products Chart
   const topCanvas = document.getElementById('topProductsChart');
   if (topCanvas) {
-    const topLabels = products.slice(0, 5).map(p => p.name);
-    const topValues = products.slice(0, 5).map(p => Math.floor(Math.random() * 40) + 10);
+    const sortedProducts = [...products]
+      .filter(p => (p.sales_count || 0) > 0)
+      .sort((a, b) => (b.sales_count || 0) - (a.sales_count || 0))
+      .slice(0, 5);
+
+    const topLabels = sortedProducts.length > 0 ? sortedProducts.map(p => p.name) : ['No Data'];
+    const topValues = sortedProducts.length > 0 ? sortedProducts.map(p => p.sales_count || 0) : [0];
+
     dashboardChartInstances.topProd = new Chart(topCanvas, {
       type: 'bar',
       data: {
@@ -2985,12 +3084,16 @@ function renderDashboardCharts() {
       else payCounts.cash++;
     });
 
+    const totalPayCount = Object.values(payCounts).reduce((a, b) => a + b, 0);
+
     dashboardChartInstances.payMethod = new Chart(payCanvas, {
       type: 'doughnut',
       data: {
         labels: ['Cash', 'Card', 'UPI', 'Razorpay'],
         datasets: [{
-          data: [payCounts.cash || 5, payCounts.card || 3, payCounts.upi || 2, payCounts.razorpay || 1],
+          data: totalPayCount > 0 
+            ? [payCounts.cash, payCounts.card, payCounts.upi, payCounts.razorpay]
+            : [0, 0, 0, 0],
           backgroundColor: ['#10b981', '#3b82f6', '#8b5cf6', '#0284c7']
         }]
       },
@@ -3003,9 +3106,9 @@ function renderDashboardCharts() {
   }
 
   // Sparklines
-  renderSparkline('sparkCustomers', [1, 2, 3, 4, customers.length], '#6366f1');
-  renderSparkline('sparkOrders', [5, 8, 12, 15, sales.length], '#a855f7');
-  renderSparkline('sparkProducts', [6, 7, 8, 9, products.length], '#3b82f6');
+  renderSparkline('sparkCustomers', [0, 0, 0, 0, customers.length], '#6366f1');
+  renderSparkline('sparkOrders', [0, 0, 0, 0, sales.length], '#a855f7');
+  renderSparkline('sparkProducts', [0, 0, 0, 0, products.length], '#3b82f6');
 }
 
 function renderSparkline(canvasId, dataPoints, color) {
