@@ -167,54 +167,14 @@ function formatTimeAgo(timestamp) {
 }
 
 // Mock Data Store (Fallbacks if Express server / Supabase is loading/offline)
-let brands = [
-  { id: 1, name: 'Kohler', code: 'KOH' },
-  { id: 2, name: 'Havells', code: 'HAV' },
-  { id: 3, name: 'Asian Paints', code: 'ASP' },
-  { id: 4, name: 'CenturyPly', code: 'CEN' }
-];
-
-let categories = [
-  { id: 1, name: 'Flooring & Tiles', parent_id: null },
-  { id: 2, name: 'Lighting', parent_id: null },
-  { id: 3, name: 'Furniture & Decor', parent_id: null },
-  { id: 4, name: 'Food & Beverages', parent_id: null },
-  { id: 5, name: 'Clothing', parent_id: null },
-  { id: 6, name: 'Electronics', parent_id: null },
-  { id: 7, name: 'Home & Garden', parent_id: null }
-];
-
-let products = [
-  { id: 1, sku: 'FOD001', barcode: 'FOD001', name: 'Chocolate Bar', brand_id: 1, category_id: 4, uom: 'piece', coverage_per_box: null, cost_price: 1.50, selling_price: 2.99, material: 'Organic', finish: 'Standard', dimensions: '100g', shade_lot_number: 'LOT-CHOC', min_stock_alert: 50, stock: 1200, image_url: 'https://images.unsplash.com/photo-1582176647444-f7b60e6f7734?w=400' },
-  { id: 2, sku: 'FOD002', barcode: 'FOD002', name: 'Coffee Beans', brand_id: 1, category_id: 4, uom: 'piece', coverage_per_box: null, cost_price: 6.00, selling_price: 12.99, material: 'Arabica', finish: 'Roasted', dimensions: '500g', shade_lot_number: 'LOT-COFF', min_stock_alert: 5, stock: 3, image_url: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=400' },
-  { id: 3, sku: 'CLT001', barcode: 'CLT001', name: 'Cotton T-Shirt', brand_id: 2, category_id: 5, uom: 'piece', coverage_per_box: null, cost_price: 8.00, selling_price: 19.99, material: 'Cotton', finish: 'Blue', dimensions: 'Medium', shade_lot_number: 'LOT-TSHIRT', min_stock_alert: 10, stock: 99, image_url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=400' },
-  { id: 4, sku: 'HOM001', barcode: 'HOM001', name: 'Gardening Tools Set', brand_id: 3, category_id: 7, uom: 'piece', coverage_per_box: null, cost_price: 25.00, selling_price: 59.99, material: 'Steel & Wood', finish: 'Natural', dimensions: '3-Piece', shade_lot_number: 'LOT-GARD', min_stock_alert: 5, stock: 18, image_url: 'https://images.unsplash.com/photo-1617576683096-00fc8eecb3af?w=400' },
-  { id: 5, sku: 'CLT002', barcode: 'CLT002', name: 'Jeans', brand_id: 2, category_id: 5, uom: 'piece', coverage_per_box: null, cost_price: 20.00, selling_price: 49.99, material: 'Denim', finish: 'Classic Wash', dimensions: 'Size 32', shade_lot_number: 'LOT-JEANS', min_stock_alert: 10, stock: 74, image_url: 'https://images.unsplash.com/photo-1542272604-780c96856592?w=400' },
-  { id: 6, sku: 'ELE001', barcode: 'ELE001', name: 'Laptop Pro', brand_id: 4, category_id: 6, uom: 'piece', coverage_per_box: null, cost_price: 800.00, selling_price: 1299.99, material: 'Aluminum', finish: 'Space Gray', dimensions: '15-inch', shade_lot_number: 'LOT-LAPTOP', min_stock_alert: 2, stock: 15, image_url: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=400' },
-  { id: 7, sku: 'TL-CAR-60-GL', barcode: 'TL-CAR-60-GL', name: 'Carrara White Glossy Tile', brand_id: 1, category_id: 1, uom: 'box', coverage_per_box: 14.4, cost_price: 18.50, selling_price: 32.99, material: 'Ceramic', finish: 'Glossy', dimensions: '600x600 mm', shade_lot_number: 'BATCH-2026A', min_stock_alert: 10, stock: 45, image_url: 'https://images.unsplash.com/photo-1615873968403-89e068629265?w=400' },
-  { id: 8, sku: 'LT-CHN-BR-12', barcode: 'LT-CHN-BR-12', name: 'Brushed Brass Chandelier', brand_id: 2, category_id: 2, uom: 'piece', coverage_per_box: null, cost_price: 120.00, selling_price: 249.99, material: 'Brass & Glass', finish: 'Brushed', dimensions: '12-Light', shade_lot_number: 'N/A', min_stock_alert: 3, stock: 8, image_url: 'https://images.unsplash.com/photo-1540932239986-30128078f3c5?w=400' },
-  { id: 9, sku: 'FN-SOF-WL-03', barcode: 'FN-SOF-WL-03', name: 'Walnut Wood 3-Seater Sofa', brand_id: 4, category_id: 3, uom: 'piece', coverage_per_box: null, cost_price: 450.00, selling_price: 899.00, material: 'Teak/Walnut Wood', finish: 'Walnut Stain', dimensions: '3-Seater', shade_lot_number: 'WL-03', min_stock_alert: 2, stock: 1, image_url: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=400' }
-];
-
-let customers = [
-  { id: 1, name: 'John Doe', phone: '+1 555-0199', email: 'john@example.com', address: '123 Pine St', credit_limit: 1000.00, balance: 0.00, loyalty_points: 120, tier: 'silver' },
-  { id: 2, name: 'Apex Builders', phone: '+1 555-9011', email: 'billing@apex.com', address: '45 Industrial Ave', credit_limit: 50000.00, balance: 14500.00, loyalty_points: 2450, tier: 'platinum' }
-];
-
+let brands = [];
+let categories = [];
+let products = [];
+let customers = [];
 let sales = [];
-
 let transfers = [];
-
-let warehouses = [
-  { id: 1, name: 'Main Warehouse', code: 'WH-MAIN', type: 'warehouse', address: '404 Logistics Boulevard, Sector 5' },
-  { id: 2, name: 'City Showroom', code: 'SR-CITY', type: 'showroom', address: '12 Luxury Retail Avenue, Downtown' },
-  { id: 3, name: 'Transit Dock', code: 'TD-TRANSIT', type: 'transit', address: 'Harbor Gate 12, Shipping Terminal' }
-];
-
-let staff = [
-  { id: 1, username: 'admin', full_name: 'System Admin', email: 'admin@inventia.com', role: 'admin', status: 1 },
-  { id: 2, username: 'vivin', full_name: 'Vivin', email: 'test@inventia.com', role: 'manager', status: 1 }
-];
+let warehouses = [];
+let staff = [];
 
 // Intercept all API fetches to inject the auth token and role headers dynamically
 const originalFetch = window.fetch;
