@@ -9,6 +9,7 @@ import salesRoutes from './routes/sales.js';
 import usersRoutes from './routes/users.js';
 import settingsRoutes from './routes/settings.js';
 import aiRoutes from './routes/ai.js';
+import invoiceRoutes from './src/routes/invoiceRoutes.js';
 
 dotenv.config();
 
@@ -34,6 +35,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Serve static UI assets if available (frontend)
 app.use(express.static('public'));
+app.use('/uploads', express.static('uploads'));
 
 // Mount API Endpoints
 app.use('/api/auth', authRoutes);
@@ -42,6 +44,7 @@ app.use('/api/sales', salesRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/pos', invoiceRoutes);
 
 // Health Check / Welcome Endpoint
 app.get('/api/status', (req, res) => {

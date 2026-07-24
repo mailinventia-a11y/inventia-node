@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GST Invoice</title>
+  <style>
+    /* Embed the CSS directly to ensure Puppeteer loads it correctly without cross-origin issues */
+    {{CSS_CONTENT}}
+  </style>
+</head>
+<body>
+
+<div class="invoice-container">
+  <!-- 1. Header Area -->
+  <table class="header-table">
+    <tr>
+      <td>
+        {{LOGO_HTML}}
+        <div class="company-name">{{companyName}}</div>
+        <div class="company-details">
+          {{companyAddress}}<br>
+          Phone: {{companyPhone}} | Email: {{companyEmail}}<br>
+          <strong>GSTIN:</strong> {{companyGSTIN}} | <strong>PAN:</strong> {{companyPAN}}
+        </div>
+      </td>
+      <td class="invoice-title-block">
+        <div class="invoice-title">TAX INVOICE</div>
+        <div class="company-details">
+          <strong>Original for Recipient</strong><br>
+          <strong>Invoice No:</strong> {{invoiceNumber}}<br>
+          <strong>Date:</strong> {{invoiceDate}}<br>
+          <strong>Payment Mode:</strong> {{paymentMode}}<br>
+          <strong>State:</strong> {{companyState}} (Code: {{companyStateCode}})
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- 2 & 3. Customer and Invoice Meta Details -->
+  <table class="details-table">
+    <tr>
+      <td>
+        <div class="details-card-title">Details of Receiver (Bill To)</div>
+        <div class="details-item">Name: <span>{{customerName}}</span></div>
+        <div class="details-item">Address: <span>{{customerAddress}}</span></div>
+        <div class="details-item">Phone: <span>{{customerPhone}}</span></div>
+        <div class="details-item">GSTIN: <span>{{customerGSTIN}}</span></div>
+        <div class="details-item">State: <span>{{customerState}}</span> (Code: <span>{{customerStateCode}}</span>)</div>
+      </td>
+      <td>
+        <div class="details-card-title">Transportation & Delivery Details</div>
+        <div class="details-item">Challan Number: <span>{{challanNumber}}</span></div>
+        <div class="details-item">Transport Mode: <span>{{transport}}</span></div>
+        <div class="details-item">Vehicle Number: <span>{{vehicle}}</span></div>
+        <div class="details-item">E-Way Bill No: <span>{{ewayBill}}</span></div>
+        <div class="details-item">Payment Status: <span>{{paymentStatus}}</span></div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- 4. Product Table -->
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th style="width: 5%;">Sr.</th>
+        <th style="width: 30%;">Product / Service Description</th>
+        <th style="width: 10%;">HSN/SAC</th>
+        <th style="width: 8%;">Qty</th>
+        <th style="width: 6%;">Unit</th>
+        <th style="width: 10%;">Rate</th>
+        <th style="width: 8%;">Disc %</th>
+        <th style="width: 10%;">Taxable Value</th>
+        <th style="width: 6%;">GST %</th>
+        <th style="width: 8%;">CGST</th>
+        <th style="width: 8%;">SGST</th>
+        <th style="width: 8%;">IGST</th>
+        <th style="width: 12%;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{TABLE_ROWS}}
+    </tbody>
+  </table>
+
+  <!-- 5 & 6. Summary, Words & Bank/Terms Card -->
+  <table class="summary-table">
+    <tr>
+      <td class="summary-left-col">
+        <!-- Amount in words -->
+        <div class="words-card">
+          <strong>Amount Chargeable (in words):</strong><br>
+          {{amountInWords}}
+        </div>
+
+        <!-- Bank Details -->
+        <div class="bank-card">
+          <div class="details-card-title" style="border-color: #cbd5e1; margin-bottom: 1.5mm;">Bank Details</div>
+          <div class="bank-grid">
+            <div class="bank-info">
+              <div class="details-item">Bank Name: <span>{{bankName}}</span></div>
+              <div class="details-item">A/C Number: <span>{{accountNumber}}</span></div>
+              <div class="details-item">IFSC: <span>{{ifsc}}</span></div>
+              <div class="details-item">UPI ID: <span>{{upi}}</span></div>
+            </div>
+            {{QR_CODE_HTML}}
+          </div>
+        </div>
+
+        <!-- Terms and conditions -->
+        <div class="terms-card">
+          <div class="details-card-title" style="border-color: #cbd5e1; margin-bottom: 1.5mm;">Terms & Conditions</div>
+          <div style="font-size: 7.5pt; line-height: 1.4; color: var(--text-muted);">
+            {{termsAndConditions}}
+          </div>
+        </div>
+      </td>
+      <td class="summary-right-col">
+        <table class="totals-grid">
+          <tr>
+            <td class="totals-label">Total Taxable Value</td>
+            <td class="totals-val">{{taxableAmount}}</td>
+          </tr>
+          <tr>
+            <td class="totals-label">CGST Total</td>
+            <td class="totals-val">{{totalCGST}}</td>
+          </tr>
+          <tr>
+            <td class="totals-label">SGST Total</td>
+            <td class="totals-val">{{totalSGST}}</td>
+          </tr>
+          <tr>
+            <td class="totals-label">IGST Total</td>
+            <td class="totals-val">{{totalIGST}}</td>
+          </tr>
+          <tr>
+            <td class="totals-label">Round Off</td>
+            <td class="totals-val">{{roundOff}}</td>
+          </tr>
+          <tr class="totals-row-grand">
+            <td class="totals-label">Grand Total</td>
+            <td class="totals-val">{{grandTotal}}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <!-- 9. Signatures Block -->
+  <table class="signature-table">
+    <tr>
+      <td>
+        <div class="signature-line"></div>
+        <div class="signature-label">Customer Signature</div>
+      </td>
+      <td>
+        <div style="font-size: 8pt; margin-bottom: 8mm; color: var(--text-muted);">For {{companyName}}</div>
+        <div class="signature-line"></div>
+        <div class="signature-label">Authorized Signatory</div>
+      </td>
+    </tr>
+  </table>
+</div>
+
+</body>
+</html>

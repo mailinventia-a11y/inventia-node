@@ -274,6 +274,41 @@ ALTER TABLE inventory_logs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE stock_transfers DISABLE ROW LEVEL SECURITY;
 ALTER TABLE app_settings DISABLE ROW LEVEL SECURITY;
 
+-- 15. GST Invoices Tables
+CREATE TABLE IF NOT EXISTS invoices (
+  id SERIAL PRIMARY KEY,
+  invoiceNumber VARCHAR(100) UNIQUE NOT NULL,
+  customerId INT REFERENCES customers(id) ON DELETE SET NULL,
+  saleId INT REFERENCES sales(id) ON DELETE SET NULL,
+  subtotal DECIMAL(10,2) NOT NULL,
+  cgst DECIMAL(10,2) DEFAULT 0.00,
+  sgst DECIMAL(10,2) DEFAULT 0.00,
+  igst DECIMAL(10,2) DEFAULT 0.00,
+  discount DECIMAL(10,2) DEFAULT 0.00,
+  grandTotal DECIMAL(10,2) NOT NULL,
+  paymentStatus VARCHAR(50) DEFAULT 'completed',
+  pdfPath TEXT,
+  createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS invoice_items (
+  invoiceItemId SERIAL PRIMARY KEY,
+  invoiceId INT REFERENCES invoices(id) ON DELETE CASCADE,
+  productId INT REFERENCES products(id) ON DELETE CASCADE,
+  hsn VARCHAR(50),
+  qty INT NOT NULL,
+  rate DECIMAL(10,2) NOT NULL,
+  taxPercent DECIMAL(10,2) DEFAULT 18.00,
+  taxAmount DECIMAL(10,2) DEFAULT 0.00,
+  lineTotal DECIMAL(10,2) NOT NULL
+);
+
+ALTER TABLE invoices DISABLE ROW LEVEL SECURITY;
+ALTER TABLE invoice_items DISABLE ROW LEVEL SECURITY;
+
+SELECT setval('invoices_id_seq', COALESCE((SELECT MAX(id)+1 FROM invoices), 1), false);
+SELECT setval('invoice_items_invoiceItemId_seq', COALESCE((SELECT MAX(invoiceItemId)+1 FROM invoice_items), 1), false);
+
 -- 14. Performance Indexes for Production High-Throughput POS Lookups
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);

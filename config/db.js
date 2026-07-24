@@ -205,6 +205,36 @@ if (isSupabaseConfigured()) {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
 
+    // 13. Invoices
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS invoices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoiceNumber TEXT UNIQUE NOT NULL,
+      customerId INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+      saleId INTEGER REFERENCES sales(id) ON DELETE SET NULL,
+      subtotal REAL NOT NULL,
+      cgst REAL DEFAULT 0.0,
+      sgst REAL DEFAULT 0.0,
+      igst REAL DEFAULT 0.0,
+      discount REAL DEFAULT 0.0,
+      grandTotal REAL NOT NULL,
+      paymentStatus TEXT DEFAULT 'completed',
+      pdfPath TEXT,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // 14. Invoice Items
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS invoice_items (
+      invoiceItemId INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoiceId INTEGER REFERENCES invoices(id) ON DELETE CASCADE,
+      productId INTEGER REFERENCES products(id) ON DELETE CASCADE,
+      hsn TEXT,
+      qty INTEGER NOT NULL,
+      rate REAL NOT NULL,
+      taxPercent REAL DEFAULT 18.0,
+      taxAmount REAL DEFAULT 0.0,
+      lineTotal REAL NOT NULL
+    )`);
+
     // ----------------------------------------------------
     // SEED DEFAULT DATA IF TABLES ARE EMPTY
     // ----------------------------------------------------

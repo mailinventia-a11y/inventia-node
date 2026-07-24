@@ -1,0 +1,284 @@
+/* GST Invoice Print Stylesheet */
+
+:root {
+  --primary-color: #1e293b;
+  --secondary-color: #0f172a;
+  --accent-color: #0284c7;
+  --border-color: #cbd5e1;
+  --bg-light: #f8fafc;
+  --text-dark: #0f172a;
+  --text-muted: #475569;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 10pt;
+  line-height: 1.4;
+  color: var(--text-dark);
+  background: #fff;
+  padding: 10mm;
+}
+
+.invoice-container {
+  width: 100%;
+  max-width: 210mm; /* A4 Width */
+  margin: 0 auto;
+}
+
+/* Header Area */
+.header-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 6mm;
+}
+
+.header-table td {
+  vertical-align: top;
+  border: none;
+}
+
+.company-logo {
+  max-height: 15mm;
+  margin-bottom: 2mm;
+}
+
+.company-name {
+  font-size: 16pt;
+  font-weight: bold;
+  color: var(--primary-color);
+  text-transform: uppercase;
+  margin-bottom: 1mm;
+}
+
+.company-details, .invoice-title-block {
+  font-size: 8pt;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.invoice-title-block {
+  text-align: right;
+}
+
+.invoice-title {
+  font-size: 18pt;
+  font-weight: 800;
+  color: var(--accent-color);
+  letter-spacing: 1px;
+  margin-bottom: 2mm;
+}
+
+/* Info Cards Block */
+.details-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 6mm;
+}
+
+.details-table td {
+  width: 50%;
+  vertical-align: top;
+  padding: 3mm;
+  border: 1px solid var(--border-color);
+}
+
+.details-card-title {
+  font-size: 9pt;
+  font-weight: bold;
+  color: var(--primary-color);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 1mm;
+  margin-bottom: 2mm;
+  text-transform: uppercase;
+}
+
+.details-item {
+  font-size: 8.5pt;
+  margin-bottom: 1mm;
+}
+
+.details-item span {
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+/* Product Table */
+.items-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 6mm;
+  page-break-inside: auto;
+}
+
+.items-table th {
+  background-color: var(--primary-color);
+  color: white;
+  font-size: 8pt;
+  font-weight: bold;
+  text-transform: uppercase;
+  padding: 2mm;
+  border: 1px solid var(--primary-color);
+  text-align: center;
+}
+
+.items-table td {
+  padding: 2mm;
+  border: 1px solid var(--border-color);
+  font-size: 8pt;
+  vertical-align: middle;
+}
+
+.items-table tr {
+  page-break-inside: avoid;
+  page-break-after: auto;
+}
+
+.items-table thead {
+  display: table-header-group;
+}
+
+.text-left { text-align: left; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+
+/* Totals Box & Terms Area */
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 6mm;
+}
+
+.summary-table td {
+  vertical-align: top;
+  border: none;
+}
+
+.summary-left-col {
+  width: 60%;
+  padding-right: 5mm;
+}
+
+.summary-right-col {
+  width: 40%;
+}
+
+.bank-card, .terms-card {
+  border: 1px solid var(--border-color);
+  background: var(--bg-light);
+  padding: 3mm;
+  border-radius: 4px;
+  font-size: 8pt;
+  margin-bottom: 4mm;
+}
+
+.bank-grid {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bank-info {
+  flex: 1;
+}
+
+.qr-code-img {
+  width: 18mm;
+  height: 18mm;
+  border: 1px solid var(--border-color);
+  padding: 1mm;
+  background: white;
+}
+
+/* Calculation Grid */
+.totals-grid {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--border-color);
+}
+
+.totals-grid td {
+  padding: 2mm;
+  font-size: 8.5pt;
+  border: 1px solid var(--border-color);
+}
+
+.totals-label {
+  font-weight: bold;
+  text-align: right;
+  background: var(--bg-light);
+  color: var(--text-muted);
+}
+
+.totals-val {
+  text-align: right;
+  font-weight: 600;
+  width: 35%;
+}
+
+.totals-row-grand {
+  background-color: var(--accent-color) !important;
+  color: white !important;
+}
+
+.totals-row-grand td {
+  font-size: 10pt !important;
+  font-weight: bold !important;
+  border-color: var(--accent-color) !important;
+}
+
+.totals-row-grand .totals-label {
+  background: var(--accent-color) !important;
+  color: white !important;
+}
+
+/* Words and Signatures */
+.words-card {
+  border: 1px solid var(--border-color);
+  padding: 2.5mm;
+  font-size: 8.5pt;
+  font-style: italic;
+  margin-bottom: 10mm;
+}
+
+.signature-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10mm;
+}
+
+.signature-table td {
+  width: 50%;
+  text-align: center;
+  vertical-align: bottom;
+  height: 25mm;
+  font-size: 9pt;
+  border: none;
+}
+
+.signature-line {
+  width: 60%;
+  margin: 0 auto 1.5mm auto;
+  border-top: 1px solid var(--text-dark);
+}
+
+.signature-label {
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
+/* Print Page Settings */
+@media print {
+  body {
+    padding: 0;
+  }
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+}
