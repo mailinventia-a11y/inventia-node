@@ -197,6 +197,7 @@ function initializePOSApp() {
   setupNavigation();
   loadDashboardData();
   loadPOSCatalog();
+  renderPOSCategoryFilters();
   loadInventoryTable();
   loadTransferLogs();
   loadCustomerLedger();
@@ -314,6 +315,7 @@ async function syncWithBackend() {
 
     loadDashboardData();
     loadPOSCatalog();
+    renderPOSCategoryFilters();
     loadInventoryTable();
     loadCustomerLedger();
     loadBrandsAndCategories();
@@ -598,6 +600,32 @@ function downloadInvoice(saleId) {
 }
 
 // ================= MODULE 2: POS CATALOG & CART =================
+function renderPOSCategoryFilters() {
+  const container = document.getElementById('posCategoryFilters');
+  if (!container) return;
+
+  let html = `<button class="filter-btn active" data-cat="all" onclick="handleCategoryFilterClick(this, 'all')">All Products</button>`;
+  
+  categories.forEach(cat => {
+    html += `<button class="filter-btn" data-cat="${cat.id}" onclick="handleCategoryFilterClick(this, ${cat.id})">${cat.name}</button>`;
+  });
+  
+  container.innerHTML = html;
+}
+
+function handleCategoryFilterClick(btn, categoryId) {
+  const filterBtns = document.querySelectorAll('#posCategoryFilters .filter-btn');
+  filterBtns.forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  if (categoryId === 'all') {
+    loadPOSCatalog();
+  } else {
+    const filtered = products.filter(p => p.category_id === categoryId);
+    loadPOSCatalog(filtered);
+  }
+}
+
 function loadPOSCatalog(filteredList = null) {
   const grid = document.getElementById('posProductGrid');
   grid.innerHTML = '';
@@ -1460,16 +1488,6 @@ async function submitNewCustomer(event) {
 
 // Setup Event Listeners for Filtering & Search
 document.addEventListener('DOMContentLoaded', () => {
-  // POS Catalog Filters
-  const filterBtns = document.querySelectorAll('.filter-btn');
-  filterBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      filterBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const cat = btn.getAttribute('data-cat');
-      filterPOSCatalog(cat);
-    });
-  });
 
   // Search filter keyup
   const searchInput = document.getElementById('globalSearch');
