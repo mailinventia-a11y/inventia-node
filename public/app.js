@@ -6,22 +6,6 @@ let activeCalculatorProduct = null;
 let currencySymbol = '₹';
 let currencyCode = 'INR';
 
-// Global Fetch Interceptor to dynamically inject active user credentials
-const originalFetch = window.fetch;
-window.fetch = function(url, options = {}) {
-  if (typeof url === 'string' && url.startsWith('/api/')) {
-    options.headers = options.headers || {};
-    const token = localStorage.getItem('token');
-    const role = localStorage.getItem('role');
-    const userId = localStorage.getItem('userId');
-    
-    if (token) options.headers['Authorization'] = 'Bearer ' + token;
-    if (role) options.headers['x-user-role'] = role;
-    if (userId) options.headers['x-user-id'] = userId;
-  }
-  return originalFetch(url, options);
-};
-
 // Mock Data Store (Fallbacks if Express server / Supabase is loading/offline)
 let brands = [
   { id: 1, name: 'Kohler', code: 'KOH' },
