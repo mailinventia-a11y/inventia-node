@@ -73,6 +73,37 @@ CREATE TABLE IF NOT EXISTS warehouse_stock (
   UNIQUE(warehouse_id, product_id)
 );
 
+-- Triggers to auto-initialize warehouse_stock records
+CREATE OR REPLACE FUNCTION init_product_stock()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+  SELECT id, NEW.id, 0 FROM warehouses
+  ON CONFLICT (warehouse_id, product_id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER trigger_init_product_stock
+AFTER INSERT ON products
+FOR EACH ROW
+EXECUTE FUNCTION init_product_stock();
+
+CREATE OR REPLACE FUNCTION init_warehouse_stock()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+  SELECT NEW.id, id, 0 FROM products
+  ON CONFLICT (warehouse_id, product_id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER trigger_init_warehouse_stock
+AFTER INSERT ON warehouses
+FOR EACH ROW
+EXECUTE FUNCTION init_warehouse_stock();
+
 -- 7. Customers & Credit Management
 CREATE TABLE IF NOT EXISTS customers (
   id SERIAL PRIMARY KEY,
@@ -174,6 +205,60 @@ ON CONFLICT (setting_key) DO NOTHING;
 INSERT INTO users (username, password_hash, full_name, email, role) VALUES 
 ('admin', '$2y$10$jYDiutpajwvRPjavffXbVugffjwINhEua/lGu//OE7.iwBtW7Qwli', 'System Admin', 'admin@interiorpos.com', 'admin')
 ON CONFLICT (username) DO NOTHING;
+
+-- Seed Data (Default Warehouses)
+INSERT INTO warehouses (id, name, code, type, address) VALUES
+(1, 'Main Warehouse', 'WH-MAIN', 'warehouse', '404 Logistics Boulevard, Sector 5'),
+(2, 'City Showroom', 'SR-CITY', 'showroom', '12 Luxury Retail Avenue, Downtown'),
+(3, 'Transit Dock', 'TD-TRANSIT', 'transit', 'Harbor Gate 12, Shipping Terminal')
+ON CONFLICT (id) DO NOTHING;
+
+-- Seed Data (Default Brands)
+INSERT INTO brands (id, name, code, logo_url) VALUES
+(1, 'Royal Interiors', 'ROYAL-INT', ''),
+(2, 'Aura Ceramics', 'AURA-CER', ''),
+(3, 'Decora Wallpaper', 'DECORA-WP', '')
+ON CONFLICT (id) DO NOTHING;
+
+-- Seed Data (Default Categories)
+INSERT INTO categories (id, name, parent_id, description) VALUES
+(1, 'Tiles', NULL, 'Premium ceramic and porcelain tiles'),
+(2, 'Wallpapers', NULL, 'Modern wall coverings and decals'),
+(3, 'Lighting', NULL, 'Luxury fixtures and chandeliers')
+ON CONFLICT (id) DO NOTHING;
+
+-- Seed Data (Default Products)
+INSERT INTO products (id, sku, barcode, name, brand_id, category_id, description, uom, cost_price, selling_price, material, finish, dimensions, shade_lot_number) VALUES
+(1, 'TL-CAR-60-GL', '8901234567890', 'Carrara White Glossy Tile', 2, 1, 'Italian carrara marble look glossy finish tile', 'box', 45.00, 89.90, 'Ceramic', 'Glossy', '600x600mm', 'LOT-2026A'),
+(2, 'WP-FLR-20-MT', '8901234567891', 'Floral Meadow Wallpaper', 3, 2, 'Vinyl wallpaper with matte floral patterns', 'bundle', 15.00, 35.50, 'Vinyl', 'Matte', '0.53x10m', 'LOT-99B'),
+(3, 'LT-CHN-08-GL', '8901234567892', '8-Light Crystal Chandelier', 1, 3, 'Spectacular crystal glass chandelier', 'piece', 120.00, 299.00, 'Glass & Steel', 'Polished Chrome', 'D800mm', 'LOT-CH-1')
+ON CONFLICT (id) DO NOTHING;
+
+-- Seed Data (Default Warehouse Stock)
+INSERT INTO warehouse_stock (warehouse_id, product_id, quantity, bin_location) VALUES
+(1, 1, 150, 'Rack A-01'),
+(2, 1, 30, 'Showroom Shelf 1'),
+(3, 1, 0, 'Transit Bay 1'),
+(1, 2, 80, 'Rack B-04'),
+(2, 2, 15, 'Showroom Shelf 2'),
+(3, 2, 0, 'Transit Bay 2'),
+(1, 3, 25, 'Rack C-10'),
+(2, 3, 5, 'Showroom Display'),
+(3, 3, 0, 'Transit Bay 3')
+ON CONFLICT (warehouse_id, product_id) DO NOTHING;
+
+-- Seed Data (Default Customers)
+INSERT INTO customers (id, name, phone, email, address, credit_limit, balance, loyalty_points, tier) VALUES
+(1, 'John Doe', '+1 555-0199', 'john@example.com', '123 Pine St', 1000.00, 0.00, 120, 'silver'),
+(2, 'Apex Builders', '+1 555-9011', 'billing@apex.com', '45 Industrial Ave', 50000.00, 14500.00, 2450, 'platinum')
+ON CONFLICT (id) DO NOTHING;
+
+-- Update PostgreSQL Sequence Counters
+SELECT setval('brands_id_seq', COALESCE((SELECT MAX(id)+1 FROM brands), 1), false);
+SELECT setval('categories_id_seq', COALESCE((SELECT MAX(id)+1 FROM categories), 1), false);
+SELECT setval('products_id_seq', COALESCE((SELECT MAX(id)+1 FROM products), 1), false);
+SELECT setval('warehouses_id_seq', COALESCE((SELECT MAX(id)+1 FROM warehouses), 1), false);
+SELECT setval('customers_id_seq', COALESCE((SELECT MAX(id)+1 FROM customers), 1), false);
 
 -- Disable Row Level Security (RLS) on all tables for ease of testing in Supabase
 ALTER TABLE brands DISABLE ROW LEVEL SECURITY;
