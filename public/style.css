@@ -1807,4 +1807,123 @@ tbody tr:last-child td { border-bottom: none; }
   40% { transform: scale(1.0); }
 }
 
+/* ================================================================
+   NOTIFICATION DROPDOWN & CUSTOM TOAST SYSTEM
+   ================================================================ */
+
+.notification-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 12px);
+  width: 340px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 10000;
+  padding: 12px;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+}
+
+.notification-header strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.notification-header button {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.notification-header button:hover {
+  text-decoration: underline;
+}
+
+#notificationList {
+  max-height: 250px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+#notificationList::-webkit-scrollbar {
+  width: 4px;
+}
+#notificationList::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-full);
+}
+
+/* Toast System Styling */
+#toastContainer {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  padding: 12px 24px;
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+  animation: slideDownFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1), fadeOut 0.3s 2.7s forwards;
+  border-left: 4px solid var(--primary-color);
+  min-width: 280px;
+  max-width: 450px;
+}
+
+.toast.success { border-left-color: #10b981; }
+.toast.error { border-left-color: #ef4444; }
+.toast.info { border-left-color: #3b82f6; }
+
+@keyframes slideDownFadeIn {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
 

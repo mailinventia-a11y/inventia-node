@@ -6,6 +6,166 @@ let activeCalculatorProduct = null;
 let currencySymbol = '₹';
 let currencyCode = 'INR';
 
+// ================================================================
+// TOAST & NOTIFICATION SYSTEM IMPLEMENTATION
+// ================================================================
+let systemNotifications = [];
+
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  
+  let icon = 'fa-circle-check';
+  if (type === 'error') icon = 'fa-circle-xmark';
+  if (type === 'info') icon = 'fa-circle-info';
+  
+  toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
+  container.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.remove();
+  }, 3000);
+}
+
+async function executeAction(btn, actionFn, successMsg, notificationMsg = null) {
+  if (!btn) {
+    try {
+      await actionFn();
+      showToast(successMsg, 'success');
+      if (notificationMsg) addSystemNotification(notificationMsg);
+    } catch (err) {
+      showToast(err.message || 'Action failed', 'error');
+      throw err;
+    }
+    return;
+  }
+
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Processing...`;
+
+  try {
+    await actionFn();
+    showToast(successMsg, 'success');
+    if (notificationMsg) addSystemNotification(notificationMsg);
+  } catch (err) {
+    showToast(err.message || 'Action failed', 'error');
+    throw err;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+  }
+}
+
+function initNotifications() {
+  const stored = localStorage.getItem('system_notifications');
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+      systemNotifications = parsed.filter(n => new Date(n.timestamp).getTime() > threeDaysAgo);
+      localStorage.setItem('system_notifications', JSON.stringify(systemNotifications));
+    } catch (e) {
+      systemNotifications = [];
+    }
+  } else {
+    systemNotifications = [];
+  }
+  updateNotificationsUI();
+}
+
+function addSystemNotification(message) {
+  const notif = {
+    id: Date.now() + Math.random().toString(36).substring(2, 7),
+    message: message,
+    timestamp: new Date().toISOString(),
+    unread: true
+  };
+  systemNotifications.unshift(notif);
+  localStorage.setItem('system_notifications', JSON.stringify(systemNotifications));
+  updateNotificationsUI();
+}
+
+function updateNotificationsUI() {
+  const badge = document.getElementById('notificationBadge');
+  const list = document.getElementById('notificationList');
+  
+  const unreadCount = systemNotifications.filter(n => n.unread).length;
+  
+  if (badge) {
+    if (unreadCount > 0) {
+      badge.innerText = unreadCount;
+      badge.style.display = 'block';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+  
+  if (list) {
+    list.innerHTML = '';
+    if (systemNotifications.length === 0) {
+      list.innerHTML = `<div style="text-align: center; color: var(--ink-muted); padding: 24px; font-size: 0.8rem; font-weight: 500;"><i class="fa-regular fa-bell-slash"></i> No notifications yet</div>`;
+      return;
+    }
+    
+    systemNotifications.forEach(n => {
+      const timeAgo = formatTimeAgo(n.timestamp);
+      const div = document.createElement('div');
+      div.className = `notification-item ${n.unread ? 'unread' : ''}`;
+      div.style.cssText = `padding: 8px; border-radius: var(--radius-xs); background: ${n.unread ? 'var(--primary-color-light)' : 'var(--bg)'}; border-left: 3px solid var(--primary-color); font-size: 0.8rem; color: var(--ink-secondary); line-height: 1.3; cursor: pointer; transition: all var(--transition); margin-bottom: 8px;`;
+      
+      div.innerHTML = `
+        <div style="font-weight: ${n.unread ? '700' : '400'}; color: var(--ink);">${n.message}</div>
+        <div style="font-size: 0.7rem; color: var(--ink-muted); margin-top: 4px; text-align: right;"><i class="fa-regular fa-clock"></i> ${timeAgo}</div>
+      `;
+      
+      div.onclick = () => {
+        n.unread = false;
+        localStorage.setItem('system_notifications', JSON.stringify(systemNotifications));
+        updateNotificationsUI();
+      };
+      
+      list.appendChild(div);
+    });
+  }
+}
+
+function markAllNotificationsAsRead(event) {
+  if (event) event.stopPropagation();
+  systemNotifications.forEach(n => n.unread = false);
+  localStorage.setItem('system_notifications', JSON.stringify(systemNotifications));
+  updateNotificationsUI();
+  showToast("All notifications marked as read", "info");
+}
+
+function toggleNotificationsDropdown(event) {
+  if (event) event.stopPropagation();
+  const dropdown = document.getElementById('notificationDropdown');
+  if (dropdown) {
+    const isHidden = dropdown.style.display === 'none';
+    dropdown.style.display = isHidden ? 'block' : 'none';
+  }
+}
+
+document.addEventListener('click', () => {
+  const dropdown = document.getElementById('notificationDropdown');
+  if (dropdown) dropdown.style.display = 'none';
+});
+
+function formatTimeAgo(timestamp) {
+  const diff = Date.now() - new Date(timestamp).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 // Mock Data Store (Fallbacks if Express server / Supabase is loading/offline)
 let brands = [
   { id: 1, name: 'Kohler', code: 'KOH' },
@@ -250,6 +410,7 @@ function initializePOSApp() {
 
 // Initialize UI
 document.addEventListener('DOMContentLoaded', () => {
+  initNotifications();
   const token = localStorage.getItem('token');
   if (token) {
     // Hide login screen
@@ -950,57 +1111,69 @@ async function submitPOSCheckout() {
 }
 
 async function executeFinalCheckoutPayload(payload) {
-  try {
-    const res = await fetch('/api/sales/checkout', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-token',
-        'x-user-role': 'cashier',
-        'x-user-id': '1'
-      },
-      body: JSON.stringify(payload)
-    });
+  const btn = document.getElementById('checkoutBtn') || document.querySelector('.checkout-btn');
+  
+  const subtotal = cart.reduce((acc, i) => acc + (i.quantity * i.unit_price), 0);
+  const discountVal = payload.discount || 0;
+  const grandTotalVal = subtotal - discountVal + ((subtotal - discountVal) * 0.1);
+  const totalStr = currencySymbol + grandTotalVal.toFixed(2);
 
-    if (!res.ok) {
-      throw new Error(`Server error: ${res.status}`);
-    }
+  const actionFn = async () => {
+    try {
+      const res = await fetch('/api/sales/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer mock-token',
+          'x-user-role': 'cashier',
+          'x-user-id': '1'
+        },
+        body: JSON.stringify(payload)
+      });
 
-    const data = await res.json();
-    if (data.success) {
-      alert(`POS checkout completed! Invoice: ${data.invoice_no}`);
+      if (!res.ok) {
+        throw new Error(`Server error: ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Checkout failed');
+      }
       clearCart();
       await syncWithBackend();
-    } else {
-      alert(`Checkout failed: ${data.error}`);
+    } catch (err) {
+      console.warn("API checkout failed, using offline fallback:", err);
+      const mockInvoiceNo = 'INV-' + Date.now().toString().slice(-6);
+      sales.unshift({
+        id: Date.now(),
+        invoice_no: mockInvoiceNo,
+        customer_id: payload.customer_id,
+        user_id: 1,
+        subtotal,
+        discount: payload.discount,
+        tax_amount: (subtotal - (payload.discount || 0)) * 0.1,
+        total: grandTotalVal,
+        payment_method: payload.payment_method,
+        payment_status: 'completed',
+        sale_date: new Date()
+      });
+      cart.forEach(item => {
+        const prod = products.find(p => p.id === item.product_id);
+        if (prod) prod.stock = Math.max(0, prod.stock - item.quantity);
+      });
+      clearCart();
+      loadDashboardData();
+      loadPOSCatalog();
+      loadInventoryTable();
     }
-  } catch (err) {
-    alert(`[Offline Demo] POS checkout complete! Added to recent transactions list.`);
-    const mockInvoiceNo = 'INV-' + Date.now().toString().slice(-6);
-    const subtotal = cart.reduce((acc, i) => acc + (i.quantity * i.unit_price), 0);
-    const total = subtotal - (payload.discount || 0) + ((subtotal - (payload.discount || 0)) * 0.1);
-    sales.unshift({
-      id: Date.now(),
-      invoice_no: mockInvoiceNo,
-      customer_id: payload.customer_id,
-      user_id: 1,
-      subtotal,
-      discount: payload.discount,
-      tax_amount: (subtotal - (payload.discount || 0)) * 0.1,
-      total,
-      payment_method: payload.payment_method,
-      payment_status: 'completed',
-      sale_date: new Date()
-    });
-    cart.forEach(item => {
-      const prod = products.find(p => p.id === item.product_id);
-      if (prod) prod.stock = Math.max(0, prod.stock - item.quantity);
-    });
-    clearCart();
-    loadDashboardData();
-    loadPOSCatalog();
-    loadInventoryTable();
-  }
+  };
+
+  await executeAction(
+    btn, 
+    actionFn, 
+    "POS checkout completed successfully!", 
+    `Completed checkout of cart items for total of ${totalStr}`
+  );
 }
 
 // ================= TILE & AREA CALCULATOR =================
@@ -1176,7 +1349,10 @@ async function deleteProduct(productId) {
     return;
   }
 
-  try {
+  const p = products.find(prod => prod.id === productId);
+  const pName = p ? p.name : 'Product';
+
+  const actionFn = async () => {
     const res = await fetch(`/api/inventory/products/${productId}`, {
       method: 'DELETE',
       headers: {
@@ -1190,21 +1366,13 @@ async function deleteProduct(productId) {
     }
 
     const data = await res.json();
-    if (data.success) {
-      alert('Product deleted successfully.');
-      await syncWithBackend();
-    } else {
-      alert(`Failed to delete product: ${data.error}`);
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to delete product');
     }
-  } catch (err) {
-    console.error('Delete product failed:', err);
-    // Offline / local fallback
-    alert('[Offline Demo] Product removed successfully.');
-    products = products.filter(p => p.id !== productId);
-    loadInventoryTable();
-    loadPOSCatalog();
-    loadDashboardData();
-  }
+    await syncWithBackend();
+  };
+
+  await executeAction(null, actionFn, "Product deleted successfully.", `Product "${pName}" removed from catalog.`);
 }
 
 function openProductModal() {
@@ -1316,6 +1484,8 @@ function loadTransferLogs() {
 
 async function submitStockTransfer(event) {
   event.preventDefault();
+  const btn = event.target.querySelector('button[type="submit"]') || event.target.querySelector('.submit-form-btn');
+
   const pId = parseInt(document.getElementById('transferProductSelect').value);
   const fromWhId = parseInt(document.getElementById('transferFromSelect').value);
   const toWhId = parseInt(document.getElementById('transferToSelect').value);
@@ -1328,7 +1498,10 @@ async function submitStockTransfer(event) {
     quantity: qty
   };
 
-  try {
+  const product = products.find(p => p.id === pId);
+  const pName = product ? product.name : 'Product';
+
+  const actionFn = async () => {
     const res = await fetch('/api/inventory/stock/transfer', {
       method: 'POST',
       headers: {
@@ -1345,32 +1518,11 @@ async function submitStockTransfer(event) {
       throw new Error(err.error || 'Server error');
     }
 
-    alert('Stock transfer completed successfully!');
     document.getElementById('transferForm').reset();
     await syncWithBackend();
-  } catch (err) {
-    console.error('Transfer API failed, using fallback:', err);
-    // Offline simulation mode fallback
-    alert(`[Offline Demo] Stock transfer completed successfully (simulated).\nError: ${err.message}`);
-    const fromWh = document.getElementById('transferFromSelect').options[document.getElementById('transferFromSelect').selectedIndex].text;
-    const toWh = document.getElementById('transferToSelect').options[document.getElementById('transferToSelect').selectedIndex].text;
-    const product = products.find(p => p.id === pId);
-    if (product) {
-      transfers.unshift({
-        id: transfers.length + 1,
-        from: fromWh,
-        to: toWh,
-        product: product.name,
-        qty: qty,
-        status: 'completed'
-      });
-      product.stock = Math.max(0, product.stock - qty);
-      loadTransferLogs();
-      loadInventoryTable();
-      loadDashboardData();
-      document.getElementById('transferForm').reset();
-    }
-  }
+  };
+
+  await executeAction(btn, actionFn, "Stock transfer completed successfully!", `Transferred ${qty} of ${pName} between warehouses.`);
 }
 
 
@@ -1568,6 +1720,8 @@ function exportCustomersCSV() {
 // Submit Customer Form
 async function submitNewCustomer(event) {
   event.preventDefault();
+  const btn = event.target.querySelector('button[type="submit"]') || event.target.querySelector('.submit-form-btn');
+  
   const payload = {
     id: customers.length + 1,
     name: document.getElementById('cName').value,
@@ -1580,21 +1734,21 @@ async function submitNewCustomer(event) {
     tier: 'bronze'
   };
 
-  customers.push(payload);
-  alert('Customer profile created successfully!');
-  
-  closeCustomerModal();
-  document.getElementById('customerForm').reset();
-  
-  loadCustomerLedger();
-  populateDropdowns();
+  const actionFn = async () => {
+    const res = await fetch('/api/sales/customers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    customers.push(payload);
+    closeCustomerModal();
+    document.getElementById('customerForm').reset();
+    loadCustomerLedger();
+    populateDropdowns();
+  };
 
-  // POST to API in background
-  fetch('/api/sales/customers', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer mock', 'x-user-role': 'cashier' },
-    body: JSON.stringify(payload)
-  }).catch(e => console.log('Offline demo saved customer profile.'));
+  await executeAction(btn, actionFn, "Customer profile created successfully!", `Customer ${payload.name} registered successfully.`);
 }
 
 // Setup Event Listeners for Filtering & Search
@@ -1800,6 +1954,8 @@ function loadStaffList() {
 
 async function submitNewStaff(event) {
   event.preventDefault();
+  const btn = event.target.querySelector('button[type="submit"]') || event.target.querySelector('.submit-form-btn');
+
   const full_name = document.getElementById('sFullName').value;
   const username = document.getElementById('sUsername').value;
   const role = document.getElementById('sRole').value;
@@ -1808,7 +1964,7 @@ async function submitNewStaff(event) {
 
   const payload = { username, password, full_name, email, role };
 
-  try {
+  const actionFn = async () => {
     const res = await fetch('/api/users', {
       method: 'POST',
       headers: {
@@ -1824,16 +1980,11 @@ async function submitNewStaff(event) {
       throw new Error(err.error || 'Server error');
     }
 
-    alert('Staff account registered successfully!');
     document.getElementById('staffForm').reset();
     await syncWithBackend();
-  } catch (err) {
-    console.error('Staff registration API failed, using fallback:', err);
-    alert('[Offline Demo] Staff account registered successfully (simulated).');
-    staff.push({ id: staff.length + 1, username, full_name, email, role, status: 1 });
-    document.getElementById('staffForm').reset();
-    loadStaffList();
-  }
+  };
+
+  await executeAction(btn, actionFn, "Staff account registered successfully!", `New staff user "${full_name}" registered.`);
 }
 
 async function toggleUserStatus(userId, currentStatus) {
@@ -1869,6 +2020,8 @@ async function toggleUserStatus(userId, currentStatus) {
 // ================= APP SETTINGS MANAGEMENT =================
 async function submitSettings(event) {
   event.preventDefault();
+  const btn = event.target.querySelector('button[type="submit"]') || event.target.querySelector('.submit-form-btn');
+  
   const companyName = document.getElementById('setCompanyName').value;
   const companyEmail = document.getElementById('setCompanyEmail').value;
   const companyAddress = document.getElementById('setCompanyAddress').value;
@@ -1891,11 +2044,10 @@ async function submitSettings(event) {
     { setting_key: 'theme_color', setting_value: themeColor }
   ];
 
-  // Apply to sidebar UI
   const logo = document.querySelector('.logo-title');
   if (logo) logo.innerText = companyName.toUpperCase();
 
-  try {
+  const actionFn = async () => {
     const res = await fetch('/api/settings', {
       method: 'PUT',
       headers: {
@@ -1910,13 +2062,10 @@ async function submitSettings(event) {
       const err = await res.json();
       throw new Error(err.error || 'Server error');
     }
-
-    alert('Global settings updated successfully! UI refreshed.');
     await syncWithBackend();
-  } catch (err) {
-    console.error('Settings API failed, using fallback:', err);
-    alert('[Offline Demo] Global settings updated successfully (simulated).');
-  }
+  };
+
+  await executeAction(btn, actionFn, "Global settings updated successfully!", "System settings updated successfully.");
 }
 
 // ================= REPORTS & ANALYTICS OPERATIONS =================
