@@ -879,8 +879,70 @@
               <input type="text" id="setCompanyPhone" value="+1 234 567 890" required>
             </div>
             <div class="form-group">
-              <label>Currency Symbol</label>
+              <label>Quick Currency Selector (Top 50 Preset)</label>
+              <select id="currencyPresetSelect" onchange="applyCurrencyPreset(this.value)">
+                <option value="">-- Manual Input --</option>
+                <option value="INR|₹">INR - Indian Rupee (₹)</option>
+                <option value="USD|$">USD - US Dollar ($)</option>
+                <option value="EUR|€">EUR - Euro (€)</option>
+                <option value="GBP|£">GBP - British Pound (£)</option>
+                <option value="JPY|¥">JPY - Japanese Yen (¥)</option>
+                <option value="AUD|A$">AUD - Australian Dollar (A$)</option>
+                <option value="CAD|C$">CAD - Canadian Dollar (C$)</option>
+                <option value="CHF|CHF">CHF - Swiss Franc (CHF)</option>
+                <option value="CNY|¥">CNY - Chinese Yuan (¥)</option>
+                <option value="SEK|kr">SEK - Swedish Krona (kr)</option>
+                <option value="NZD|NZ$">NZD - New Zealand Dollar (NZ$)</option>
+                <option value="MXN|$">MXN - Mexican Peso ($)</option>
+                <option value="SGD|S$">SGD - Singapore Dollar (S$)</option>
+                <option value="HKD|HK$">HKD - Hong Kong Dollar (HK$)</option>
+                <option value="NOK|kr">NOK - Norwegian Krone (kr)</option>
+                <option value="KRW|₩">KRW - South Korean Won (₩)</option>
+                <option value="TRY|₺">TRY - Turkish Lira (₺)</option>
+                <option value="RUB|₽">RUB - Russian Ruble (₽)</option>
+                <option value="BRL|R$">BRL - Brazilian Real (R$)</option>
+                <option value="ZAR|R">ZAR - South African Rand (R)</option>
+                <option value="DKK|kr">DKK - Danish Krone (kr)</option>
+                <option value="PLN|zł">PLN - Polish Zloty (zł)</option>
+                <option value="TWD|NT$">TWD - New Taiwan Dollar (NT$)</option>
+                <option value="THB|฿">THB - Thai Baht (฿)</option>
+                <option value="IDR|Rp">IDR - Indonesian Rupiah (Rp)</option>
+                <option value="HUF|Ft">HUF - Hungarian Forint (Ft)</option>
+                <option value="CZK|Kč">CZK - Czech Koruna (Kč)</option>
+                <option value="ILS|₪">ILS - Israeli New Shekel (₪)</option>
+                <option value="CLP|$">CLP - Chilean Peso ($)</option>
+                <option value="PHP|₱">PHP - Philippine Peso (₱)</option>
+                <option value="AED|د.إ">AED - UAE Dirham (د.إ)</option>
+                <option value="COP|$">COP - Colombian Peso ($)</option>
+                <option value="SAR|ر.س">SAR - Saudi Riyal (ر.س)</option>
+                <option value="MYR|RM">MYR - Malaysian Ringgit (RM)</option>
+                <option value="RON|lei">RON - Romanian Leu (lei)</option>
+                <option value="VND|₫">VND - Vietnamese Dong (₫)</option>
+                <option value="ARS|$">ARS - Argentine Peso ($)</option>
+                <option value="PEN|S/.">PEN - Peruvian Sol (S/.)</option>
+                <option value="EGP|E£">EGP - Egyptian Pound (E£)</option>
+                <option value="IQD|ع.د">IQD - Iraqi Dinar (ع.د)</option>
+                <option value="QAR|ر.ق">QAR - Qatari Riyal (ر.ق)</option>
+                <option value="KWD|د.ك">KWD - Kuwaiti Dinar (د.ك)</option>
+                <option value="DZD|د.ج">DZD - Algerian Dinar (د.ج)</option>
+                <option value="MAD|د.م.">MAD - Moroccan Dirham (د.م.)</option>
+                <option value="OMR|ر.ع.">OMR - Omani Rial (ر.ع.)</option>
+                <option value="UAH|₴">UAH - Ukrainian Hryvnia (₴)</option>
+                <option value="PKR|₨">PKR - Pakistani Rupee (₨)</option>
+                <option value="BDT|৳">BDT - Bangladeshi Taka (৳)</option>
+                <option value="LKR|₨">LKR - Sri Lankan Rupee (₨)</option>
+                <option value="NGN|₦">NGN - Nigerian Naira (₦)</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Currency Symbol (Manual Override)</label>
               <input type="text" id="setCurrencySymbol" value="₹" required>
+            </div>
+            <div class="form-group">
+              <label>System Currency Code (Manual Override)</label>
+              <input type="text" id="setCurrencyCode" value="INR" required>
             </div>
           </div>
           <div class="form-row">
@@ -889,8 +951,7 @@
               <input type="number" id="setTaxRate" step="0.01" value="10" required>
             </div>
             <div class="form-group">
-              <label>System Currency Code</label>
-              <input type="text" id="setCurrencyCode" value="INR" required>
+              <!-- Empty spacer to align grid rows -->
             </div>
           </div>
           <div class="form-row">

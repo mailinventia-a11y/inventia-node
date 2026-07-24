@@ -367,6 +367,19 @@ function changeThemeColorPreview(color) {
   if (setEl) setEl.value = color;
 }
 
+function applyCurrencyPreset(val) {
+  if (!val) return;
+  const parts = val.split('|');
+  const code = parts[0];
+  const symbol = parts[1];
+  
+  const symbolInput = document.getElementById('setCurrencySymbol');
+  const codeInput = document.getElementById('setCurrencyCode');
+  
+  if (symbolInput) symbolInput.value = symbol;
+  if (codeInput) codeInput.value = code;
+}
+
 // Sidebar Navigation Router
 function setupNavigation() {
   // Setup parent level tab buttons
