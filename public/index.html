@@ -159,40 +159,199 @@
   <!-- Main Container -->
   <main class="main-content">
     
-    <!-- Top Header Bar -->
-    <header class="header-bar">
-      <div class="header-brand">
-        <span class="brand-pill">WORKSPACE</span>
-        <span class="brand-name">Inventia</span>
-      </div>
-      <div class="header-actions">
-        <div class="calculator-trigger" onclick="toggleCalculatorModal()">
-          <i class="fa-solid fa-calculator"></i> Area Calculator
+    <!-- Compact Global Header Bar -->
+    <header class="header-bar compact-global-header">
+      <div class="header-left-group">
+        <!-- Sidebar Toggle -->
+        <button class="header-sidebar-toggle" id="sidebarToggleBtn" onclick="toggleSidebarMenu()" title="Toggle Sidebar Menu">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+        
+        <!-- Brand Logo -->
+        <div class="header-brand-logo" onclick="switchTab('dashboard')" title="Go to Dashboard Overview">
+          <div class="logo-icon-box">
+            <i class="fa-solid fa-bolt"></i>
+          </div>
+          <span class="header-brand-title">Inventia</span>
+          <span class="header-badge-pill">POS</span>
         </div>
-        <span class="notification-bell" onclick="toggleNotificationsDropdown(event)">
-          <i class="fa-solid fa-bell"></i>
-          <span class="badge" id="notificationBadge" style="display: none;">0</span>
-          
+
+        <!-- + Create Direct-Create Menu Dropdown -->
+        <div class="header-dropdown-wrapper" id="createMenuWrapper">
+          <button class="btn-header-create" onclick="toggleCreateMenu(event)">
+            <i class="fa-solid fa-plus"></i>
+            <span>Create</span>
+            <i class="fa-solid fa-chevron-down caret-icon"></i>
+          </button>
+
+          <div class="create-menu-dropdown" id="createMenuDropdown" style="display: none;" onclick="event.stopPropagation()">
+            <div class="menu-search-filter">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" placeholder="Search creation actions..." id="createMenuFilterInput" onkeyup="filterCreateMenuOptions()">
+            </div>
+            <div class="create-menu-grid" id="createMenuGrid">
+              <button class="create-item" onclick="handleCreateAction('invoice')"><i class="fa-solid fa-file-invoice-dollar text-primary"></i> Invoice</button>
+              <button class="create-item" onclick="handleCreateAction('purchase_invoice')"><i class="fa-solid fa-file-import text-info"></i> Purchase Invoice</button>
+              <button class="create-item" onclick="handleCreateAction('purchase_order')"><i class="fa-solid fa-cart-flatbed text-success"></i> Purchase Order</button>
+              <button class="create-item" onclick="handleCreateAction('quotation')"><i class="fa-solid fa-receipt text-warning"></i> Quotation</button>
+              <button class="create-item" onclick="handleCreateAction('sales_order')"><i class="fa-solid fa-boxes-packing text-primary"></i> Sales Order</button>
+              <button class="create-item" onclick="handleCreateAction('pro_forma_invoice')"><i class="fa-solid fa-file-contract text-secondary"></i> Pro Forma Invoice</button>
+              <button class="create-item" onclick="handleCreateAction('delivery_challan')"><i class="fa-solid fa-truck-ramp-box text-purple"></i> Delivery Challan</button>
+              <button class="create-item" onclick="handleCreateAction('sales_return')"><i class="fa-solid fa-rotate-left text-danger"></i> Sales Return</button>
+              <button class="create-item" onclick="handleCreateAction('purchase_return')"><i class="fa-solid fa-arrow-rotate-right text-orange"></i> Purchase Return</button>
+              <button class="create-item" onclick="handleCreateAction('expense')"><i class="fa-solid fa-wallet text-danger"></i> Expense</button>
+              <button class="create-item" onclick="handleCreateAction('customer')"><i class="fa-solid fa-user-plus text-primary"></i> Customer</button>
+              <button class="create-item" onclick="handleCreateAction('vendor')"><i class="fa-solid fa-store text-info"></i> Vendor</button>
+              <button class="create-item" onclick="handleCreateAction('pay_in')"><i class="fa-solid fa-hand-holding-dollar text-success"></i> Pay In</button>
+              <button class="create-item" onclick="handleCreateAction('pay_out')"><i class="fa-solid fa-money-bill-transfer text-danger"></i> Pay Out</button>
+              <button class="create-item" onclick="handleCreateAction('product')"><i class="fa-solid fa-box-open text-primary"></i> Product</button>
+              <button class="create-item" onclick="handleCreateAction('stock_in')"><i class="fa-solid fa-warehouse text-success"></i> Stock In</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Search Input Bar -->
+        <div class="header-ai-search-box">
+          <i class="fa-solid fa-sparkles ai-icon"></i>
+          <input type="text" id="globalAISearchInput" placeholder="AI Search products, invoices, customers... (Ctrl+K)" onkeydown="handleGlobalAISearch(event)">
+          <span class="kbd-shortcut">Ctrl K</span>
+        </div>
+      </div>
+
+      <div class="header-right-group">
+        <!-- Area Calc Tool -->
+        <button class="header-tool-btn" onclick="toggleCalculatorModal()" title="Area Calculator">
+          <i class="fa-solid fa-calculator"></i>
+          <span class="tool-label">Calculator</span>
+        </button>
+
+        <!-- 🔔 Notifications Feed Dropdown -->
+        <div class="header-dropdown-wrapper">
+          <button class="header-icon-btn notification-bell" onclick="toggleNotificationsDropdown(event)" title="Notifications">
+            <i class="fa-solid fa-bell"></i>
+            <span class="badge" id="notificationBadge" style="display: none;">0</span>
+          </button>
+
           <div id="notificationDropdown" class="notification-dropdown" style="display: none;" onclick="event.stopPropagation()">
             <div class="notification-header">
-              <strong><i class="fa-solid fa-bell"></i> Notifications</strong>
+              <div>
+                <strong><i class="fa-solid fa-bell"></i> Notifications</strong>
+                <span class="retention-pill">3-Day Retention</span>
+              </div>
               <button onclick="markAllNotificationsAsRead(event)">Mark All As Read</button>
             </div>
-            <div id="notificationList">
-              <!-- Dynamically populated -->
+            
+            <div class="notif-category-pills">
+              <button class="notif-pill active" onclick="filterNotifications('all', event)">All</button>
+              <button class="notif-pill" onclick="filterNotifications('sales', event)">Sales</button>
+              <button class="notif-pill" onclick="filterNotifications('stock', event)">Stock</button>
+              <button class="notif-pill" onclick="filterNotifications('dues', event)">Dues</button>
+            </div>
+
+            <div id="notificationList" class="notification-list-body">
+              <!-- Dynamically populated feed -->
+            </div>
+
+            <div class="notification-footer" onclick="viewAllNotifications()">
+              <span class="view-all-link">View All Notifications →</span>
             </div>
           </div>
-        </span>
-        <div class="header-profile">
-          <div class="profile-avatar">A</div>
-          <div class="profile-info">
-            <span class="profile-name">Admin</span>
-            <span class="profile-role">Admin</span>
+        </div>
+
+        <!-- 👤 Richer Profile Dropdown -->
+        <div class="header-dropdown-wrapper">
+          <div class="header-profile-trigger" onclick="toggleProfileDropdown(event)" title="Account Profile">
+            <div class="profile-avatar" id="headerAvatar">A</div>
+            <div class="profile-info-compact">
+              <span class="profile-name" id="headerProfileName">Admin</span>
+              <span class="profile-role" id="headerProfileRole">Admin</span>
+            </div>
+            <i class="fa-solid fa-chevron-down caret-icon"></i>
+          </div>
+
+          <div id="profileDropdown" class="profile-dropdown-menu" style="display: none;" onclick="event.stopPropagation()">
+            <!-- Profile Info Header Card -->
+            <div class="profile-menu-header">
+              <div class="profile-header-avatar" id="menuHeaderAvatar">A</div>
+              <div class="profile-header-details">
+                <h4 id="menuHeaderName">System Admin</h4>
+                <div class="profile-detail-line"><i class="fa-solid fa-envelope"></i> <span id="menuHeaderEmail">admin@inventia.com</span></div>
+                <div class="profile-detail-line"><i class="fa-solid fa-phone"></i> <span id="menuHeaderPhone">+91 98765 43210</span></div>
+                <div class="profile-tags-row">
+                  <span class="role-badge" id="menuHeaderRole">ADMIN</span>
+                  <span class="credits-badge"><i class="fa-solid fa-bolt"></i> 500 Credits</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="menu-divider"></div>
+
+            <!-- Premium & Subscription Section -->
+            <div class="menu-section">
+              <button class="profile-menu-item highlight-item" onclick="openPremiumOfferModal()">
+                <i class="fa-solid fa-percent text-amber"></i>
+                <span>Get 50% Off Premium</span>
+                <span class="menu-badge-offer">50% OFF</span>
+              </button>
+              <button class="profile-menu-item" onclick="openSubscriptionModal()">
+                <i class="fa-solid fa-gem text-purple"></i>
+                <span>Check Premium Plans</span>
+              </button>
+            </div>
+
+            <div class="menu-divider"></div>
+
+            <!-- Preferences & Utilities Section -->
+            <div class="menu-section">
+              <button class="profile-menu-item" onclick="toggleThemeMode()">
+                <i class="fa-solid fa-moon text-indigo" id="themeToggleIcon"></i>
+                <span id="themeToggleLabel">Daily Mode</span>
+                <span class="theme-switch-indicator" id="themeSwitchStatus">Dark</span>
+              </button>
+              <button class="profile-menu-item" onclick="openKeyboardShortcutsModal()">
+                <i class="fa-solid fa-keyboard text-teal"></i>
+                <span>Keyboard Shortcuts</span>
+                <span class="menu-shortcut-tag">Ctrl+/</span>
+              </button>
+              <button class="profile-menu-item" onclick="openHelpSupportModal()">
+                <i class="fa-solid fa-circle-question text-blue"></i>
+                <span>Help & Support</span>
+              </button>
+              <button class="profile-menu-item" onclick="switchTab('settings-tab')">
+                <i class="fa-solid fa-gear text-slate"></i>
+                <span>Settings</span>
+              </button>
+            </div>
+
+            <div class="menu-divider"></div>
+
+            <!-- Referrals & Logout -->
+            <div class="menu-section">
+              <button class="profile-menu-item" onclick="openReferralModal()">
+                <i class="fa-solid fa-gift text-rose"></i>
+                <span>Refer & Earn</span>
+                <span class="menu-badge-earn">₹500 Reward</span>
+              </button>
+              <button class="profile-menu-item danger-item" onclick="logout()">
+                <i class="fa-solid fa-right-from-bracket text-red"></i>
+                <span>Logout</span>
+              </button>
+            </div>
+
+            <div class="menu-divider"></div>
+
+            <!-- Play Store App Button Footer -->
+            <div class="profile-menu-footer">
+              <button class="app-download-btn" onclick="openAppDownloadModal()">
+                <i class="fa-brands fa-google-play"></i>
+                <div>
+                  <span class="app-btn-sub">GET IT ON</span>
+                  <span class="app-btn-main">Play Store App</span>
+                </div>
+              </button>
+            </div>
           </div>
         </div>
-        <button class="header-logout-btn" onclick="logout()">
-          <i class="fa-solid fa-right-from-bracket"></i> Logout
-        </button>
       </div>
     </header>
 
@@ -2129,6 +2288,151 @@
           <i class="fa-solid fa-right-to-bracket"></i> Sign In
         </button>
       </form>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts Modal -->
+  <div id="shortcutsModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-keyboard text-teal"></i> Keyboard Shortcuts</h3>
+        <button class="modal-close-btn" onclick="closeModal('shortcutsModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 12px; font-size: 0.85rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-light); border-radius: var(--radius-sm);">
+          <span><i class="fa-solid fa-sparkles text-primary"></i> AI Global Search</span>
+          <kbd style="padding: 3px 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; font-weight: 700;">Ctrl + K</kbd>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-light); border-radius: var(--radius-sm);">
+          <span><i class="fa-solid fa-cart-shopping text-success"></i> Open POS Checkout</span>
+          <kbd style="padding: 3px 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; font-weight: 700;">F2</kbd>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-light); border-radius: var(--radius-sm);">
+          <span><i class="fa-solid fa-box-open text-info"></i> Create New Product</span>
+          <kbd style="padding: 3px 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; font-weight: 700;">F4</kbd>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-light); border-radius: var(--radius-sm);">
+          <span><i class="fa-solid fa-user-plus text-warning"></i> Add New Customer</span>
+          <kbd style="padding: 3px 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; font-weight: 700;">F8</kbd>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-light); border-radius: var(--radius-sm);">
+          <span><i class="fa-solid fa-calculator text-purple"></i> Toggle Area Calculator</span>
+          <kbd style="padding: 3px 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; font-weight: 700;">Alt + C</kbd>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-light); border-radius: var(--radius-sm);">
+          <span><i class="fa-solid fa-moon text-indigo"></i> Toggle Dark/Light Mode</span>
+          <kbd style="padding: 3px 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; font-weight: 700;">Alt + D</kbd>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help & Support Modal -->
+  <div id="helpModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 550px;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-circle-question text-blue"></i> Help & Support Center</h3>
+        <button class="modal-close-btn" onclick="closeModal('helpModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="padding: 14px; background: var(--primary-color-light); border-radius: var(--radius-md); border: 1px solid var(--primary-color);">
+          <h4 style="margin-bottom: 6px; color: var(--primary-color);"><i class="fa-solid fa-headset"></i> 24/7 Dedicated Priority Support</h4>
+          <p style="font-size: 0.82rem; color: var(--ink-secondary);">Our support team is online to assist you with GST filing, invoice setup, hardware printer configurations, and inventory sync.</p>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 0.85rem;">
+          <div style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+            <div style="font-weight: 700; color: var(--ink);"><i class="fa-solid fa-envelope text-info"></i> Email Support</div>
+            <div style="font-size: 0.8rem; color: var(--ink-muted); margin-top: 4px;">support@inventia.com</div>
+          </div>
+          <div style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+            <div style="font-weight: 700; color: var(--ink);"><i class="fa-solid fa-phone text-success"></i> Toll Free Phone</div>
+            <div style="font-size: 0.8rem; color: var(--ink-muted); margin-top: 4px;">+1 800 123 4567</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Premium Offer & Plans Modal -->
+  <div id="premiumModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 650px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; margin: -20px -20px 20px -20px; padding: 20px 24px; border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
+        <div>
+          <h3 style="color: white; margin-bottom: 4px;"><i class="fa-solid fa-gem"></i> Inventia POS Premium</h3>
+          <p style="font-size: 0.82rem; opacity: 0.9;">Unlock Unlimited Outlets, AI Invoicing & Advanced GST Reports</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal('premiumModal')" style="color: white; opacity: 0.8;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 18px;">
+        <div style="padding: 12px 16px; background: #fffbeb; border: 1px dashed #f59e0b; border-radius: var(--radius-md); display: flex; justify-content: space-between; align-items: center;">
+          <div style="color: #92400e; font-weight: 700; font-size: 0.9rem;">
+            <i class="fa-solid fa-bolt text-amber"></i> Special Festival Offer: 50% OFF Annual Plan
+          </div>
+          <span style="background: #ef4444; color: white; padding: 4px 10px; border-radius: 20px; font-weight: 800; font-size: 0.75rem;">SAVE 50%</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <div style="border: 2px solid var(--primary-color); border-radius: var(--radius-md); padding: 18px; position: relative;">
+            <div style="font-weight: 800; font-size: 1.1rem; color: var(--ink);">PRO POS</div>
+            <div style="font-size: 1.6rem; font-weight: 900; color: var(--primary-color); margin: 8px 0;">₹499 <span style="font-size: 0.8rem; color: var(--ink-muted); text-decoration: line-through;">₹999</span><span style="font-size: 0.75rem; color: var(--ink-muted);">/mo</span></div>
+            <ul style="font-size: 0.8rem; color: var(--ink-secondary); list-style: none; display: flex; flex-direction: column; gap: 6px; margin: 12px 0;">
+              <li><i class="fa-solid fa-check text-success"></i> Unlimited Invoices & Products</li>
+              <li><i class="fa-solid fa-check text-success"></i> GST Tax PDF Generator</li>
+              <li><i class="fa-solid fa-check text-success"></i> AI Assistant & Stock Alerts</li>
+            </ul>
+            <button class="btn-primary" style="width: 100%;" onclick="showToast('Upgraded to Pro POS Plan!', 'success'); closeModal('premiumModal');">Activate Pro Plan</button>
+          </div>
+          <div style="border: 1px solid var(--border); border-radius: var(--radius-md); padding: 18px; background: var(--bg-light);">
+            <div style="font-weight: 800; font-size: 1.1rem; color: var(--ink);">ENTERPRISE</div>
+            <div style="font-size: 1.6rem; font-weight: 900; color: var(--ink); margin: 8px 0;">₹1,499 <span style="font-size: 0.75rem; color: var(--ink-muted);">/mo</span></div>
+            <ul style="font-size: 0.8rem; color: var(--ink-secondary); list-style: none; display: flex; flex-direction: column; gap: 6px; margin: 12px 0;">
+              <li><i class="fa-solid fa-check text-success"></i> Multi-Warehouse Transfer Engine</li>
+              <li><i class="fa-solid fa-check text-success"></i> Custom Domain & Staff Roles</li>
+              <li><i class="fa-solid fa-check text-success"></i> 24/7 Dedicated Account Rep</li>
+            </ul>
+            <button class="btn-secondary" style="width: 100%;" onclick="showToast('Enterprise Inquiry Sent!', 'info'); closeModal('premiumModal');">Contact Sales</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Refer & Earn Modal -->
+  <div id="referralModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-gift text-rose"></i> Refer Friends & Earn Credits</h3>
+        <button class="modal-close-btn" onclick="closeModal('referralModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px; text-align: center;">
+        <div style="font-size: 2.5rem; color: var(--rose-500);"><i class="fa-solid fa-coins"></i></div>
+        <h4 style="color: var(--ink);">Earn ₹500 Cashback for every merchant you refer!</h4>
+        <p style="font-size: 0.82rem; color: var(--ink-muted);">Share your unique referral link with fellow retail shop owners, suppliers, or business partners.</p>
+        <div style="display: flex; gap: 8px; margin-top: 8px;">
+          <input type="text" value="https://inventia.pos/ref/ADMIN99" readonly id="referralLinkInput" style="flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-weight: 700; background: var(--bg-light);">
+          <button class="btn-primary" onclick="copyReferralLink()"><i class="fa-solid fa-copy"></i> Copy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Play Store App Modal -->
+  <div id="appDownloadModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 480px; text-align: center;">
+      <div class="modal-header">
+        <h3><i class="fa-brands fa-google-play text-success"></i> Inventia Mobile POS App</h3>
+        <button class="modal-close-btn" onclick="closeModal('appDownloadModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px; align-items: center;">
+        <p style="font-size: 0.85rem; color: var(--ink-secondary);">Scan the QR code with your mobile camera to install the Inventia Android POS App directly on your phone or tablet.</p>
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://play.google.com/store/apps/details?id=com.inventia.pos" style="width: 180px; height: 180px; border: 4px solid var(--border); border-radius: var(--radius-md); padding: 8px; background: white;" alt="Play Store QR Code">
+        <a href="#" class="app-download-btn" style="width: 100%; justify-content: center;" onclick="showToast('Redirecting to Google Play Store...', 'info'); return false;">
+          <i class="fa-brands fa-google-play" style="font-size: 1.5rem;"></i>
+          <div>
+            <span class="app-btn-sub">GET IT ON</span>
+            <span class="app-btn-main">Google Play Store</span>
+          </div>
+        </a>
+      </div>
     </div>
   </div>
 

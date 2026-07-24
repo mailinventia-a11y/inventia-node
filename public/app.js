@@ -118,6 +118,11 @@ function updateNotificationsUI() {
   const badge = document.getElementById('notificationBadge');
   const list = document.getElementById('notificationList');
   
+  // 3-day retention check
+  const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+  systemNotifications = systemNotifications.filter(n => new Date(n.timestamp).getTime() > threeDaysAgo);
+  localStorage.setItem('system_notifications', JSON.stringify(systemNotifications));
+
   const unreadCount = systemNotifications.filter(n => n.unread).length;
   
   if (badge) {
@@ -131,20 +136,41 @@ function updateNotificationsUI() {
   
   if (list) {
     list.innerHTML = '';
-    if (systemNotifications.length === 0) {
-      list.innerHTML = `<div style="text-align: center; color: var(--ink-muted); padding: 24px; font-size: 0.8rem; font-weight: 500;"><i class="fa-regular fa-bell-slash"></i> No notifications yet</div>`;
-      return;
-    }
     
-    systemNotifications.forEach(n => {
+    let displayNotifs = [...systemNotifications];
+    if (typeof currentNotifFilter !== 'undefined') {
+      if (currentNotifFilter === 'sales') {
+        displayNotifs = displayNotifs.filter(n => n.message.toLowerCase().includes('sale') || n.message.toLowerCase().includes('payment'));
+      } else if (currentNotifFilter === 'stock') {
+        displayNotifs = displayNotifs.filter(n => n.message.toLowerCase().includes('stock') || n.message.toLowerCase().includes('product'));
+      } else if (currentNotifFilter === 'dues') {
+        displayNotifs = displayNotifs.filter(n => n.message.toLowerCase().includes('due') || n.message.toLowerCase().includes('overdue'));
+      }
+    }
+
+    // Seed 3-day sample feed if list is empty to provide a rich feed
+    if (displayNotifs.length === 0 && systemNotifications.length === 0) {
+      displayNotifs = [
+        { id: '1', message: '• New Sales Today: 14 Orders Processed', timestamp: new Date(Date.now() - 20 * 60000).toISOString(), unread: true },
+        { id: '2', message: '• Payment Received: ₹14,500 from Apex Builders', timestamp: new Date(Date.now() - 2 * 3600000).toISOString(), unread: true },
+        { id: '3', message: '• Payment Due Reminder: Invoice #INV-2026-004 due tomorrow', timestamp: new Date(Date.now() - 5 * 3600000).toISOString(), unread: false },
+        { id: '4', message: '• Low Stock Alert: Coffee Beans (3 units left)', timestamp: new Date(Date.now() - 12 * 3600000).toISOString(), unread: false },
+        { id: '5', message: '• Purchase Order Approved: PO-9912 by Admin', timestamp: new Date(Date.now() - 24 * 3600000).toISOString(), unread: false },
+        { id: '6', message: '• Invoice Overdue: #INV-2026-001 is 2 days overdue', timestamp: new Date(Date.now() - 36 * 3600000).toISOString(), unread: false },
+        { id: '7', message: '• Customer Activity: John Doe updated billing profile', timestamp: new Date(Date.now() - 48 * 3600000).toISOString(), unread: false },
+        { id: '8', message: '• System Updates: GST PDF Generator upgraded to v2.1', timestamp: new Date(Date.now() - 60 * 3600000).toISOString(), unread: false }
+      ];
+    }
+
+    displayNotifs.forEach(n => {
       const timeAgo = formatTimeAgo(n.timestamp);
       const div = document.createElement('div');
       div.className = `notification-item ${n.unread ? 'unread' : ''}`;
-      div.style.cssText = `padding: 8px; border-radius: var(--radius-xs); background: ${n.unread ? 'var(--primary-color-light)' : 'var(--bg)'}; border-left: 3px solid var(--primary-color); font-size: 0.8rem; color: var(--ink-secondary); line-height: 1.3; cursor: pointer; transition: all var(--transition); margin-bottom: 8px;`;
+      div.style.cssText = `padding: 8px 10px; border-radius: var(--radius-xs); background: ${n.unread ? 'var(--primary-color-light)' : 'var(--bg)'}; border-left: 3px solid ${n.unread ? 'var(--primary-color)' : 'var(--border)'}; font-size: 0.78rem; color: var(--ink-secondary); line-height: 1.35; cursor: pointer; transition: all var(--transition);`;
       
       div.innerHTML = `
-        <div style="font-weight: ${n.unread ? '700' : '400'}; color: var(--ink);">${n.message}</div>
-        <div style="font-size: 0.7rem; color: var(--ink-muted); margin-top: 4px; text-align: right;"><i class="fa-regular fa-clock"></i> ${timeAgo}</div>
+        <div style="font-weight: ${n.unread ? '700' : '500'}; color: var(--ink);">${n.message}</div>
+        <div style="font-size: 0.68rem; color: var(--ink-muted); margin-top: 4px; text-align: right;"><i class="fa-regular fa-clock"></i> ${timeAgo}</div>
       `;
       
       div.onclick = () => {
@@ -156,6 +182,22 @@ function updateNotificationsUI() {
       list.appendChild(div);
     });
   }
+}
+
+let currentNotifFilter = 'all';
+
+function filterNotifications(category, event) {
+  if (event) event.stopPropagation();
+  currentNotifFilter = category;
+  document.querySelectorAll('.notif-pill').forEach(pill => pill.classList.remove('active'));
+  if (event && event.target) event.target.classList.add('active');
+  updateNotificationsUI();
+}
+
+function viewAllNotifications() {
+  closeAllHeaderDropdowns();
+  switchTab('reports');
+  showToast('Showing complete 3-day notification audit trail in Analytics', 'info');
 }
 
 function markAllNotificationsAsRead(event) {
@@ -171,14 +213,246 @@ function toggleNotificationsDropdown(event) {
   const dropdown = document.getElementById('notificationDropdown');
   if (dropdown) {
     const isHidden = dropdown.style.display === 'none';
+    closeAllHeaderDropdowns();
     dropdown.style.display = isHidden ? 'block' : 'none';
   }
 }
 
+function closeAllHeaderDropdowns() {
+  const notif = document.getElementById('notificationDropdown');
+  if (notif) notif.style.display = 'none';
+  
+  const create = document.getElementById('createMenuDropdown');
+  if (create) create.style.display = 'none';
+
+  const profile = document.getElementById('profileDropdown');
+  if (profile) profile.style.display = 'none';
+}
+
 document.addEventListener('click', () => {
-  const dropdown = document.getElementById('notificationDropdown');
-  if (dropdown) dropdown.style.display = 'none';
+  closeAllHeaderDropdowns();
 });
+
+// + Create Dropdown Logic
+function toggleCreateMenu(event) {
+  if (event) event.stopPropagation();
+  const dropdown = document.getElementById('createMenuDropdown');
+  if (dropdown) {
+    const isHidden = dropdown.style.display === 'none';
+    closeAllHeaderDropdowns();
+    if (isHidden) {
+      dropdown.style.display = 'block';
+      const filterInput = document.getElementById('createMenuFilterInput');
+      if (filterInput) {
+        filterInput.value = '';
+        filterCreateMenuOptions();
+        setTimeout(() => filterInput.focus(), 50);
+      }
+    }
+  }
+}
+
+function filterCreateMenuOptions() {
+  const query = (document.getElementById('createMenuFilterInput')?.value || '').toLowerCase().trim();
+  const items = document.querySelectorAll('#createMenuGrid .create-item');
+  items.forEach(item => {
+    const text = item.textContent.toLowerCase();
+    item.style.display = text.includes(query) ? 'flex' : 'none';
+  });
+}
+
+function handleCreateAction(actionType) {
+  closeAllHeaderDropdowns();
+  switch (actionType) {
+    case 'invoice':
+    case 'pro_forma_invoice':
+    case 'quotation':
+      switchTab('pos');
+      showToast(`Switched to POS for ${actionType.replace(/_/g, ' ').toUpperCase()}`, 'info');
+      break;
+    case 'purchase_invoice':
+    case 'purchase_order':
+    case 'delivery_challan':
+    case 'purchase_return':
+    case 'stock_in':
+      switchTab('inventory');
+      showToast(`Initiated ${actionType.replace(/_/g, ' ').toUpperCase()} workflow in Inventory`, 'info');
+      break;
+    case 'sales_order':
+    case 'sales_return':
+      switchTab('sales');
+      showToast(`Opened Sales History for ${actionType.replace(/_/g, ' ').toUpperCase()}`, 'info');
+      break;
+    case 'expense':
+    case 'pay_out':
+      switchTab('reports');
+      showToast(`Opened Expenses & Reports for ${actionType.replace(/_/g, ' ').toUpperCase()}`, 'info');
+      break;
+    case 'customer':
+    case 'pay_in':
+      openCustomerModal();
+      break;
+    case 'vendor':
+      switchTab('crm');
+      showToast('Opened Vendor & CRM Management', 'info');
+      break;
+    case 'product':
+      openProductModal();
+      break;
+    default:
+      showToast(`Action ${actionType} triggered`, 'success');
+  }
+}
+
+// AI Global Search & Shortcuts
+function handleGlobalAISearch(event) {
+  if (event.key === 'Enter') {
+    const query = event.target.value.trim();
+    if (!query) return;
+    showToast(`Searching for "${query}" via AI Engine...`, 'info');
+    const posSearch = document.getElementById('posSearchInput');
+    if (posSearch) {
+      switchTab('pos');
+      posSearch.value = query;
+      filterPOSProducts();
+    } else {
+      toggleAiChatDrawer();
+    }
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    const input = document.getElementById('globalAISearchInput');
+    if (input) input.focus();
+  }
+  if (e.altKey && e.key.toLowerCase() === 'd') {
+    e.preventDefault();
+    toggleThemeMode();
+  }
+  if (e.altKey && e.key.toLowerCase() === 'c') {
+    e.preventDefault();
+    toggleCalculatorModal();
+  }
+  if (e.key === 'F2') {
+    e.preventDefault();
+    switchTab('pos');
+  }
+  if (e.key === 'F4') {
+    e.preventDefault();
+    openProductModal();
+  }
+  if (e.key === 'F8') {
+    e.preventDefault();
+    openCustomerModal();
+  }
+});
+
+// Profile Dropdown & Profile Data Updates
+function toggleProfileDropdown(event) {
+  if (event) event.stopPropagation();
+  const dropdown = document.getElementById('profileDropdown');
+  if (dropdown) {
+    const isHidden = dropdown.style.display === 'none';
+    closeAllHeaderDropdowns();
+    if (isHidden) {
+      dropdown.style.display = 'block';
+      updateProfileHeaderData();
+    }
+  }
+}
+
+function updateProfileHeaderData() {
+  const role = (localStorage.getItem('role') || 'Admin').toUpperCase();
+  const username = localStorage.getItem('username') || 'Admin';
+  
+  const nameEl = document.getElementById('menuHeaderName');
+  const emailEl = document.getElementById('menuHeaderEmail');
+  const phoneEl = document.getElementById('menuHeaderPhone');
+  const roleEl = document.getElementById('menuHeaderRole');
+  const avatarEl = document.getElementById('menuHeaderAvatar');
+  
+  const hAvatar = document.getElementById('headerAvatar');
+  const hName = document.getElementById('headerProfileName');
+  const hRole = document.getElementById('headerProfileRole');
+
+  if (nameEl) nameEl.innerText = username === 'admin' ? 'System Admin' : username;
+  if (emailEl) emailEl.innerText = `${username.toLowerCase()}@inventia.com`;
+  if (phoneEl) phoneEl.innerText = username === 'admin' ? '+91 98765 43210' : '+91 91234 56789';
+  if (roleEl) roleEl.innerText = role;
+  if (avatarEl) avatarEl.innerText = username.charAt(0).toUpperCase();
+
+  if (hAvatar) hAvatar.innerText = username.charAt(0).toUpperCase();
+  if (hName) hName.innerText = username === 'admin' ? 'Admin' : username;
+  if (hRole) hRole.innerText = role;
+}
+
+function toggleThemeMode() {
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme-mode') || 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme-mode', next);
+  localStorage.setItem('themeMode', next);
+
+  const statusEl = document.getElementById('themeSwitchStatus');
+  const iconEl = document.getElementById('themeToggleIcon');
+  if (statusEl) statusEl.innerText = next === 'dark' ? 'Dark' : 'Light';
+  if (iconEl) iconEl.className = next === 'dark' ? 'fa-solid fa-sun text-amber' : 'fa-solid fa-moon text-indigo';
+  
+  showToast(`Switched to ${next === 'dark' ? 'Dark' : 'Light'} Daily Mode`, 'info');
+}
+
+function toggleSidebarMenu() {
+  const sidebar = document.querySelector('aside.sidebar');
+  const main = document.querySelector('main.main-content');
+  if (sidebar) sidebar.classList.toggle('collapsed');
+  if (main) main.classList.toggle('expanded');
+}
+
+// Profile Modal Actions
+function closeModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) modal.style.display = 'none';
+}
+function openKeyboardShortcutsModal() {
+  closeAllHeaderDropdowns();
+  const m = document.getElementById('shortcutsModal');
+  if (m) m.style.display = 'flex';
+}
+function openHelpSupportModal() {
+  closeAllHeaderDropdowns();
+  const m = document.getElementById('helpModal');
+  if (m) m.style.display = 'flex';
+}
+function openPremiumOfferModal() {
+  closeAllHeaderDropdowns();
+  const m = document.getElementById('premiumModal');
+  if (m) m.style.display = 'flex';
+}
+function openSubscriptionModal() {
+  closeAllHeaderDropdowns();
+  const m = document.getElementById('premiumModal');
+  if (m) m.style.display = 'flex';
+}
+function openReferralModal() {
+  closeAllHeaderDropdowns();
+  const m = document.getElementById('referralModal');
+  if (m) m.style.display = 'flex';
+}
+function openAppDownloadModal() {
+  closeAllHeaderDropdowns();
+  const m = document.getElementById('appDownloadModal');
+  if (m) m.style.display = 'flex';
+}
+function copyReferralLink() {
+  const input = document.getElementById('referralLinkInput');
+  if (input) {
+    input.select();
+    navigator.clipboard.writeText(input.value);
+    showToast('Referral link copied to clipboard!', 'success');
+  }
+}
 
 function formatTimeAgo(timestamp) {
   const diff = Date.now() - new Date(timestamp).getTime();
