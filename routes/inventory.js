@@ -193,6 +193,21 @@ router.put('/products/:id', checkRole(['admin', 'manager']), async (req, res) =>
   }
 });
 
+// Delete Product
+router.delete('/products/:id', checkRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) throw error;
+    res.json({ success: true, message: 'Product deleted successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST Product Image Upload (Base64)
 router.post('/products/upload', checkRole(['admin', 'manager']), async (req, res) => {
   const { fileName, base64Data } = req.body;

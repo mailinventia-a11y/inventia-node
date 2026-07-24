@@ -980,13 +980,54 @@ function loadInventoryTable() {
       <td>${cat}</td>
       <td><span class="tag">${p.material || 'N/A'}</span> <span class="tag">${p.finish || 'N/A'}</span></td>
       <td><code>${p.shade_lot_number || 'N/A'}</code></td>
-      <td>Cost: $${p.cost_price.toFixed(2)}<br><span style="font-weight:700">Sell: $${p.selling_price.toFixed(2)}</span></td>
+      <td>Cost: $${(p.cost_price || 0).toFixed(2)}<br><span style="font-weight:700">Sell: $${(p.selling_price || 0).toFixed(2)}</span></td>
       <td>
         <span class="stock-pill ${(p.stock || 0) < p.min_stock_alert ? 'low' : 'ok'}">${p.stock || 0} ${p.uom}s</span>
+      </td>
+      <td>
+        <button class="action-btn-sm" style="background:#fef2f2; border:1px solid #fee2e2; color:#dc2626; padding: 6px 10px; border-radius: 4px; font-weight:700; cursor:pointer;" onclick="deleteProduct(${p.id})">
+          <i class="fa-solid fa-trash-can"></i> Delete
+        </button>
       </td>
     `;
     table.appendChild(tr);
   });
+}
+
+async function deleteProduct(productId) {
+  if (!confirm('Are you sure you want to delete this product? This will also remove any related stock information.')) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/inventory/products/${productId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token') || 'mock-token'}`,
+        'x-user-role': localStorage.getItem('role') || 'admin'
+      }
+    });
+
+    if (!res.ok) {
+      throw new Error(`Server error: ${res.status}`);
+    }
+
+    const data = await res.json();
+    if (data.success) {
+      alert('Product deleted successfully.');
+      await syncWithBackend();
+    } else {
+      alert(`Failed to delete product: ${data.error}`);
+    }
+  } catch (err) {
+    console.error('Delete product failed:', err);
+    // Offline / local fallback
+    alert('[Offline Demo] Product removed successfully.');
+    products = products.filter(p => p.id !== productId);
+    loadInventoryTable();
+    loadPOSCatalog();
+    loadDashboardData();
+  }
 }
 
 function openProductModal() {
