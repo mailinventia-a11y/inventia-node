@@ -6,6 +6,22 @@ let activeCalculatorProduct = null;
 let currencySymbol = '₹';
 let currencyCode = 'INR';
 
+// Global Fetch Interceptor to dynamically inject active user credentials
+const originalFetch = window.fetch;
+window.fetch = function(url, options = {}) {
+  if (typeof url === 'string' && url.startsWith('/api/')) {
+    options.headers = options.headers || {};
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    const userId = localStorage.getItem('userId');
+    
+    if (token) options.headers['Authorization'] = 'Bearer ' + token;
+    if (role) options.headers['x-user-role'] = role;
+    if (userId) options.headers['x-user-id'] = userId;
+  }
+  return originalFetch(url, options);
+};
+
 // Mock Data Store (Fallbacks if Express server / Supabase is loading/offline)
 let brands = [
   { id: 1, name: 'Kohler', code: 'KOH' },
@@ -100,7 +116,7 @@ function getAuthHeaders(extraHeaders = {}) {
 
 function updateProfileUI() {
   const name = localStorage.getItem('fullName') || 'Admin';
-  const role = localStorage.getItem('role') || 'Admin';
+  const role = (localStorage.getItem('role') || 'admin').toLowerCase();
   
   // Update Header Profile
   const profileNameEl = document.querySelector('.profile-name');
@@ -115,6 +131,32 @@ function updateProfileUI() {
   if (welcomeEl) {
     const timeSpan = document.getElementById('liveTimestamp');
     welcomeEl.innerHTML = `Welcome back, ${name}! | <span id="liveTimestamp">${timeSpan ? timeSpan.innerHTML : ''}</span>`;
+  }
+
+  // Role-based navigation button visibility
+  const navButtons = document.querySelectorAll('.nav-menu > .nav-btn, .nav-menu > .nav-dropdown-wrapper');
+  navButtons.forEach(btn => {
+    btn.style.display = '';
+
+    const tab = btn.getAttribute('data-tab');
+    const isReports = btn.id === 'dropdownReports';
+
+    if (role === 'manager') {
+      if (tab === 'staff' || tab === 'settings-tab' || tab === 'backup-tab') {
+        btn.style.display = 'none';
+      }
+    } else if (role === 'cashier' || role === 'warehouse_staff') {
+      if (tab === 'staff' || tab === 'settings-tab' || tab === 'backup-tab' || isReports) {
+        btn.style.display = 'none';
+      }
+    }
+  });
+
+  // Redirect to dashboard if trying to access restricted tab
+  if (role === 'manager' && (currentTab === 'staff' || currentTab === 'settings-tab' || currentTab === 'backup-tab')) {
+    switchTab('dashboard');
+  } else if ((role === 'cashier' || role === 'warehouse_staff') && (currentTab === 'staff' || currentTab === 'settings-tab' || currentTab === 'backup-tab' || currentTab === 'reports')) {
+    switchTab('dashboard');
   }
 }
 
@@ -1753,6 +1795,7 @@ function loadStaffList() {
   if (table) {
     table.innerHTML = '';
     staff.forEach(s => {
+      const isActive = s.status !== 0;
       table.innerHTML += `
         <tr>
           <td>
@@ -1761,8 +1804,8 @@ function loadStaffList() {
           </td>
           <td>${s.username}<br><span style="font-size:0.75rem; color:var(--text-muted)">${s.email}</span></td>
           <td>
-            <button class="action-btn-sm" style="background-color:${s.status === 1 ? 'var(--success)' : 'var(--text-muted)'}" onclick="toggleUserStatus(${s.id}, ${s.status})">
-              ${s.status === 1 ? 'Active' : 'Inactive'}
+            <button class="action-btn-sm" style="background-color:${isActive ? 'var(--success)' : 'var(--text-muted)'}; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="toggleUserStatus(${s.id}, ${isActive ? 1 : 0})">
+              ${isActive ? 'Active' : 'Inactive'}
             </button>
           </td>
         </tr>
