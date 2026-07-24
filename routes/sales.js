@@ -35,6 +35,21 @@ router.post('/customers', checkRole(['admin', 'manager', 'cashier']), async (req
   }
 });
 
+// Delete customer
+router.delete('/customers/:id', checkRole(['admin']), async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('customers')
+      .delete()
+      .eq('id', req.params.id)
+      .select();
+    if (error) throw error;
+    res.json({ success: true, data: data[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Razorpay Payment Gateway - Create Order Endpoint
 router.post('/razorpay/create-order', checkRole(['admin', 'manager', 'cashier']), async (req, res) => {
   try {

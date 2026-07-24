@@ -3424,6 +3424,8 @@ function loadCustomerLedger() {
   if (!table) return;
   table.innerHTML = '';
 
+  const userRole = (localStorage.getItem('role') || 'admin').toLowerCase();
+
   customers.forEach(c => {
     const tr = document.createElement('tr');
     
@@ -3433,6 +3435,14 @@ function loadCustomerLedger() {
     if (tier === 'platinum') { tierColor = '#7c3aed'; tierBg = '#f5f3ff'; }
     else if (tier === 'gold') { tierColor = '#d97706'; tierBg = '#fef3c7'; }
     else if (tier === 'silver') { tierColor = '#2563eb'; tierBg = '#eff6ff'; }
+
+    const actionCell = userRole === 'admin' ? `
+      <td>
+        <button class="action-btn-sm" style="background-color: var(--red-600); color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; transition: background-color var(--transition);" onmouseover="this.style.backgroundColor='#b91c1c'" onmouseout="this.style.backgroundColor='var(--red-600)'" onclick="deleteCustomer(${c.id})">
+          <i class="fa-solid fa-trash"></i> Delete
+        </button>
+      </td>
+    ` : `<td>-</td>`;
 
     tr.innerHTML = `
       <td>
@@ -3451,9 +3461,38 @@ function loadCustomerLedger() {
       <td>
         <strong style="font-size:1rem; color:var(--blue-600);"><i class="fa-solid fa-star" style="color:#f59e0b;"></i> ${c.loyalty_points || 0} pts</strong>
       </td>
+      ${actionCell}
     `;
     table.appendChild(tr);
   });
+}
+
+async function deleteCustomer(customerId) {
+  if (!confirm('Are you sure you want to delete this customer profile? This action is permanent.')) {
+    return;
+  }
+
+  const cust = customers.find(c => c.id === customerId);
+  const custName = cust ? cust.name : 'Customer';
+
+  const actionFn = async () => {
+    const res = await fetch(`/api/sales/customers/${customerId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token') || 'mock-token'}`,
+        'x-user-role': localStorage.getItem('role') || 'admin'
+      }
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Server error');
+    }
+
+    await syncWithBackend();
+  };
+
+  await executeAction(null, actionFn, "Customer deleted successfully.", `Deleted customer profile "${custName}".`);
 }
 
 
