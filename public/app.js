@@ -301,6 +301,12 @@ async function syncWithBackend() {
         if (item.setting_key === 'currency_code') {
           currencyCode = item.setting_value;
         }
+        if (item.setting_key === 'theme_mode') {
+          changeThemeModePreview(item.setting_value);
+        }
+        if (item.setting_key === 'theme_color') {
+          changeThemeColorPreview(item.setting_value);
+        }
       });
     }
 
@@ -347,8 +353,22 @@ function getSettingInputId(key) {
     case 'currency_symbol': return 'setCurrencySymbol';
     case 'currency_code': return 'setCurrencyCode';
     case 'tax_rate': return 'setTaxRate';
+    case 'theme_mode': return 'setThemeMode';
+    case 'theme_color': return 'setThemeColor';
     default: return '';
   }
+}
+
+function changeThemeModePreview(mode) {
+  document.documentElement.setAttribute('data-theme-mode', mode);
+  const setEl = document.getElementById('setThemeMode');
+  if (setEl) setEl.value = mode;
+}
+
+function changeThemeColorPreview(color) {
+  document.documentElement.setAttribute('data-theme-color', color);
+  const setEl = document.getElementById('setThemeColor');
+  if (setEl) setEl.value = color;
 }
 
 // Sidebar Navigation Router
@@ -1772,6 +1792,8 @@ async function submitSettings(event) {
   const currencySymbol = document.getElementById('setCurrencySymbol').value;
   const currencyCode = document.getElementById('setCurrencyCode').value;
   const taxRate = parseFloat(document.getElementById('setTaxRate').value) / 100;
+  const themeMode = document.getElementById('setThemeMode').value;
+  const themeColor = document.getElementById('setThemeColor').value;
 
   const payload = [
     { setting_key: 'company_name', setting_value: companyName },
@@ -1780,7 +1802,9 @@ async function submitSettings(event) {
     { setting_key: 'company_phone', setting_value: companyPhone },
     { setting_key: 'currency_symbol', setting_value: currencySymbol },
     { setting_key: 'currency_code', setting_value: currencyCode },
-    { setting_key: 'tax_rate', setting_value: taxRate.toString() }
+    { setting_key: 'tax_rate', setting_value: taxRate.toString() },
+    { setting_key: 'theme_mode', setting_value: themeMode },
+    { setting_key: 'theme_color', setting_value: themeColor }
   ];
 
   // Apply to sidebar UI

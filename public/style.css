@@ -6,6 +6,13 @@
 /* ─── Design Tokens ─── */
 :root {
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Dynamic Theme Accents */
+  --primary-color: #2563eb;
+  --primary-color-hover: #1d4ed8;
+  --primary-color-light: #eff6ff;
+
+  /* Light Theme Values (Default) */
   --bg: #f8fafc;
   --bg-card: #ffffff;
   --border: #e2e8f0;
@@ -18,18 +25,144 @@
   --ink-white: #ffffff;
 
   /* Backward Compatibility Token Aliases */
-  --primary: var(--blue-600);
-  --primary-light: var(--blue-50);
+  --primary: var(--primary-color);
+  --primary-light: var(--primary-color-light);
   --text-main: var(--ink);
   --text-muted: var(--ink-muted);
   --border-color: var(--border);
   --font-family: var(--font);
   --alert: var(--red-600);
 
-  --blue-600: #2563eb;
-  --blue-700: #1d4ed8;
-  --blue-50: #eff6ff;
-  --blue-100: #dbeafe;
+  --blue-600: var(--primary-color);
+  --blue-700: var(--primary-color-hover);
+  --blue-50: var(--primary-color-light);
+  --blue-100: var(--primary-color-light);
+}
+
+/* ─── Color Theme Rules ─── */
+html[data-theme-color="blue"] {
+  --primary-color: #2563eb;
+  --primary-color-hover: #1d4ed8;
+  --primary-color-light: #eff6ff;
+}
+html[data-theme-color="orange"] {
+  --primary-color: #ea580c;
+  --primary-color-hover: #c2410c;
+  --primary-color-light: #fff7ed;
+}
+html[data-theme-color="yellow"] {
+  --primary-color: #eab308;
+  --primary-color-hover: #ca8a04;
+  --primary-color-light: #fefce8;
+}
+html[data-theme-color="purple"] {
+  --primary-color: #9333ea;
+  --primary-color-hover: #7e22ce;
+  --primary-color-light: #faf5ff;
+}
+html[data-theme-color="black"] {
+  --primary-color: #18181b;
+  --primary-color-hover: #09090b;
+  --primary-color-light: #f4f4f5;
+}
+html[data-theme-color="green"] {
+  --primary-color: #16a34a;
+  --primary-color-hover: #15803d;
+  --primary-color-light: #f0fdf4;
+}
+html[data-theme-color="pink"] {
+  --primary-color: #db2777;
+  --primary-color-hover: #be185d;
+  --primary-color-light: #fdf2f8;
+}
+
+/* ─── Dark/Light Mode Theme Rules ─── */
+html[data-theme-mode="light"] {
+  --bg: #f8fafc;
+  --bg-card: #ffffff;
+  --border: #e2e8f0;
+  --border-focus: #93c5fd;
+  --ink: #0f172a;
+  --ink-secondary: #334155;
+  --ink-muted: #64748b;
+  --ink-placeholder: #94a3b8;
+  --ink-white: #ffffff;
+}
+
+html[data-theme-mode="dark"] {
+  --bg: #090d16;
+  --bg-card: #111827;
+  --border: #1f2937;
+  --border-focus: #374151;
+  --ink: #f9fafb;
+  --ink-secondary: #e5e7eb;
+  --ink-muted: #9ca3af;
+  --ink-placeholder: #6b7280;
+  --ink-white: #ffffff;
+}
+
+/* Dark mode styling overrides */
+html[data-theme-mode="dark"] body {
+  background-color: var(--bg);
+  color: var(--ink);
+}
+
+html[data-theme-mode="dark"] .sidebar {
+  background-color: #0f172a; /* Keep dark sidebar */
+}
+
+html[data-theme-mode="dark"] input, 
+html[data-theme-mode="dark"] select, 
+html[data-theme-mode="dark"] textarea {
+  background-color: #1f2937;
+  color: var(--ink);
+  border-color: var(--border);
+}
+
+html[data-theme-mode="dark"] input:focus, 
+html[data-theme-mode="dark"] select:focus, 
+html[data-theme-mode="dark"] textarea:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px var(--primary-color-light);
+}
+
+html[data-theme-mode="dark"] .pos-item-card {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme-mode="dark"] .pos-item-card h5 {
+  color: var(--ink) !important;
+}
+
+html[data-theme-mode="dark"] .cart-item-row {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme-mode="dark"] .table-card, 
+html[data-theme-mode="dark"] .grid-panel {
+  background-color: var(--bg-card);
+  border-color: var(--border);
+  color: var(--ink);
+}
+
+html[data-theme-mode="dark"] td, 
+html[data-theme-mode="dark"] th {
+  border-color: var(--border);
+  color: var(--ink);
+}
+
+html[data-theme-mode="dark"] th {
+  background-color: #1f2937;
+  color: var(--ink);
+}
+
+html[data-theme-mode="dark"] .modal-content {
+  background-color: var(--bg-card);
+  color: var(--ink);
+  border-color: var(--border);
+}
 
   --green-600: #16a34a;
   --green-50: #f0fdf4;
