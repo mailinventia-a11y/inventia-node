@@ -18,9 +18,9 @@ router.get('/', async (req, res) => {
         { setting_key: 'company_address', setting_value: '123 Business Street, City, State 12345' },
         { setting_key: 'company_email', setting_value: 'info@inventia.com' },
         { setting_key: 'company_phone', setting_value: '+1 234 567 890' },
-        { setting_key: 'company_code', setting_value: 'USD' },
-        { setting_key: 'currency_code', setting_value: 'USD' },
-        { setting_key: 'currency_symbol', setting_value: '$' },
+        { setting_key: 'company_code', setting_value: 'INR' },
+        { setting_key: 'currency_code', setting_value: 'INR' },
+        { setting_key: 'currency_symbol', setting_value: '₹' },
         { setting_key: 'tax_rate', setting_value: '0.10' },
         { setting_key: 'theme_mode', setting_value: 'light' },
         { setting_key: 'theme_color', setting_value: 'blue' }

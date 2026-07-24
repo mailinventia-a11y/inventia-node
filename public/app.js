@@ -3,8 +3,8 @@ let currentTab = 'dashboard';
 let cart = [];
 let calculatorMode = 'dims';
 let activeCalculatorProduct = null;
-let currencySymbol = '$';
-let currencyCode = 'USD';
+let currencySymbol = '₹';
+let currencyCode = 'INR';
 
 // Mock Data Store (Fallbacks if Express server / Supabase is loading/offline)
 let brands = [

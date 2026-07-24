@@ -195,8 +195,8 @@ INSERT INTO app_settings (setting_key, setting_value) VALUES
 ('company_address', '123 Business Street, City, State 12345'),
 ('company_email', 'info@inventia.com'),
 ('company_phone', '+1 234 567 890'),
-('currency_code', 'USD'),
-('currency_symbol', '$'),
+('currency_code', 'INR'),
+('currency_symbol', '₹'),
 ('tax_rate', '0.10')
 ON CONFLICT (setting_key) DO NOTHING;
 
