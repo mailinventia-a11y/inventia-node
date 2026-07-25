@@ -932,32 +932,37 @@ function applyCurrencyPreset(val) {
   if (codeInput) codeInput.value = code;
 }
 
+function clearSidebarActiveStates() {
+  document.querySelectorAll('.sidebar .nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.sidebar .nav-dropdown-item').forEach(i => i.classList.remove('active'));
+  document.querySelectorAll('.sidebar .nav-dropdown-wrapper').forEach(w => w.classList.remove('active'));
+}
+
 // Sidebar Navigation Router
 function setupNavigation() {
-  // Setup parent level tab buttons
-  const buttons = document.querySelectorAll('.nav-menu > .nav-btn[data-tab]');
+  // Setup top-level direct buttons
+  const buttons = document.querySelectorAll('.sidebar .nav-btn[data-tab]');
   buttons.forEach(btn => {
     btn.addEventListener('click', (e) => {
       const tabName = btn.getAttribute('data-tab');
-      // Close all dropdowns when clicking top level links
-      document.querySelectorAll('.nav-dropdown-wrapper').forEach(w => w.classList.remove('active'));
       switchTab(tabName);
     });
   });
 
-  // Setup dropdown triggers
+  // Setup dropdown triggers (expand/collapse menu without turning blue)
   const triggers = document.querySelectorAll('.nav-dropdown-trigger');
   triggers.forEach(trigger => {
     trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
       const wrapper = trigger.closest('.nav-dropdown-wrapper');
       
-      // Close all other dropdown wrappers
+      // Close other dropdown wrappers
       document.querySelectorAll('.nav-dropdown-wrapper').forEach(w => {
-        if (w !== wrapper) w.classList.remove('active');
+        if (w !== wrapper) w.classList.remove('open');
       });
       
-      // Toggle current dropdown wrapper
-      wrapper.classList.toggle('active');
+      // Toggle open state on current dropdown wrapper
+      wrapper.classList.toggle('open');
     });
   });
 
@@ -965,24 +970,12 @@ function setupNavigation() {
   const subItems = document.querySelectorAll('.nav-dropdown-item');
   subItems.forEach(item => {
     item.addEventListener('click', (e) => {
+      e.stopPropagation();
       const tabName = item.getAttribute('data-tab');
       const reportType = item.getAttribute('data-report-type');
 
-      // Update active dropdown items
-      document.querySelectorAll('.nav-dropdown-item').forEach(i => i.classList.remove('active'));
-      item.classList.add('active');
-
-      // Update active parent button
-      document.querySelectorAll('.nav-menu > .nav-btn').forEach(b => b.classList.remove('active'));
-      const wrapper = item.closest('.nav-dropdown-wrapper');
-      if (wrapper) {
-        wrapper.querySelector('.nav-btn').classList.add('active');
-      }
-
-      // Switch panels
       switchTab(tabName, reportType, item);
 
-      // If report type, select correct report sub-tab
       if (reportType) {
         switchReportTab(reportType);
       }
@@ -990,46 +983,39 @@ function setupNavigation() {
   });
 }
 
-// Global switchTab helper (used by footer links, quick-action buttons, etc.)
+// Global switchTab helper
 function switchTab(tabName, reportType = null, sourceItem = null) {
   const targetPanel = document.getElementById(tabName);
   if (!targetPanel) return;
 
-  // Clear active states on all buttons and dropdown items
-  document.querySelectorAll('.nav-menu > .nav-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.nav-dropdown-item').forEach(i => i.classList.remove('active'));
+  // 1. Clear active selection color from ALL items in sidebar
+  clearSidebarActiveStates();
 
-  // If reports tab, highlight based on report type
-  if (tabName === 'reports') {
-    const type = reportType || activeReport;
-      const matchingSub = sourceItem || document.querySelector(`.nav-dropdown-item[data-tab="reports"][data-report-type="${type}"]`);
-    if (matchingSub) {
-      matchingSub.classList.add('active');
-      const wrapper = matchingSub.closest('.nav-dropdown-wrapper');
-      if (wrapper) {
-        wrapper.classList.add('active');
-        wrapper.querySelector('.nav-btn').classList.add('active');
-      }
+  // 2. Identify the active element
+  let activeElement = sourceItem;
+
+  if (!activeElement) {
+    if (tabName === 'reports' && reportType) {
+      activeElement = document.querySelector(`.nav-dropdown-item[data-tab="reports"][data-report-type="${reportType}"]`);
     }
-  } else {
-    // Highlight matching direct button
-    const matchingBtn = document.querySelector(`.nav-menu > .nav-btn[data-tab="${tabName}"]`);
-    if (matchingBtn) {
-      matchingBtn.classList.add('active');
-    } else {
-      // Highlight matching sub-item if it's inside a dropdown
-      const matchingSub = sourceItem || document.querySelector(`.nav-dropdown-item[data-tab="${tabName}"]`);
-      if (matchingSub) {
-        matchingSub.classList.add('active');
-        const wrapper = matchingSub.closest('.nav-dropdown-wrapper');
-        if (wrapper) {
-          wrapper.classList.add('active');
-          wrapper.querySelector('.nav-btn').classList.add('active');
-        }
-      }
+    if (!activeElement) {
+      activeElement = document.querySelector(`.sidebar .nav-btn[data-tab="${tabName}"]`);
+    }
+    if (!activeElement) {
+      activeElement = document.querySelector(`.nav-dropdown-item[data-tab="${tabName}"]`);
     }
   }
 
+  // 3. Highlight ONLY the active element and expand its parent wrapper if needed
+  if (activeElement) {
+    activeElement.classList.add('active');
+    const wrapper = activeElement.closest('.nav-dropdown-wrapper');
+    if (wrapper) {
+      wrapper.classList.add('open');
+    }
+  }
+
+  // 4. Activate panel view
   document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
   targetPanel.classList.add('active');
   currentTab = tabName;
