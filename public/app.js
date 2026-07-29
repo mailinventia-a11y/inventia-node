@@ -1,8 +1,100 @@
-// State Management
+﻿// State Management
 let currentTab = 'dashboard';
 let cart = [];
+
+function apiHeaders(includeJson = false) {
+  const headers = {
+    'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+    'x-user-role': localStorage.getItem('role') || '',
+    'x-user-id': localStorage.getItem('userId') || ''
+  };
+  if (includeJson) headers['Content-Type'] = 'application/json';
+  return headers;
+}
 let calculatorMode = 'dims';
 let activeCalculatorProduct = null;
+
+const INVENTIA_VISUAL_PALETTES = [
+  ['#2563eb', '#1d4ed8'],
+  ['#0891b2', '#0f766e'],
+  ['#8b5cf6', '#6d28d9'],
+  ['#f59e0b', '#d97706'],
+  ['#22c55e', '#15803d']
+];
+
+function escapeHtml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getInitials(label = '') {
+  const words = String(label).trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return 'IN';
+  return words.slice(0, 2).map(word => word[0]).join('').toUpperCase();
+}
+
+function buildProductFallbackImage(label = 'Inventia') {
+  const safeLabel = String(label || 'Inventia');
+  const paletteIndex = safeLabel.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0) % INVENTIA_VISUAL_PALETTES.length;
+  const [from, to] = INVENTIA_VISUAL_PALETTES[paletteIndex];
+  const initials = getInitials(safeLabel);
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="560" height="360" viewBox="0 0 560 360">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${from}"/>
+          <stop offset="100%" stop-color="${to}"/>
+        </linearGradient>
+      </defs>
+      <rect width="560" height="360" rx="44" fill="url(#g)"/>
+      <circle cx="452" cy="74" r="48" fill="rgba(255,255,255,0.16)"/>
+      <circle cx="112" cy="296" r="72" fill="rgba(255,255,255,0.10)"/>
+      <text x="280" y="200" text-anchor="middle" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-weight="800" font-size="118">${initials}</text>
+    </svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function resolveProductImage(imageUrl, label) {
+  if (!imageUrl || /images\.unsplash\.com/i.test(imageUrl)) {
+    return buildProductFallbackImage(label);
+  }
+  return imageUrl;
+}
+
+function renderTableProductLabel(label) {
+  const safeLabel = escapeHtml(label);
+  return `<span class="table-product-chip" aria-hidden="true">${escapeHtml(getInitials(label))}</span><strong>${safeLabel}</strong>`;
+}
+
+function syncThemeIndicators() {
+  const currentMode = document.documentElement.getAttribute('data-theme-mode') || 'light';
+  const isDark = currentMode === 'dark';
+  const statusEl = document.getElementById('themeSwitchStatus');
+  const iconEl = document.getElementById('themeToggleIcon');
+  const topIconEl = document.getElementById('topThemeToggleIcon');
+
+  if (statusEl) statusEl.innerText = isDark ? 'Dark' : 'Light';
+  if (iconEl) iconEl.className = isDark ? 'fa-solid fa-sun text-amber' : 'fa-solid fa-moon text-indigo';
+  if (topIconEl) topIconEl.className = isDark ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+}
+
+function restoreInterfacePreferences() {
+  const themeMode = localStorage.getItem('themeMode') || 'light';
+  const themeColor = localStorage.getItem('themeColor') || 'blue';
+  changeThemeModePreview(themeMode);
+  changeThemeColorPreview(themeColor);
+  syncThemeIndicators();
+
+  const shouldCollapseSidebar = localStorage.getItem('inventia_sidebar_collapsed') === 'true';
+  const sidebar = document.querySelector('aside.sidebar');
+  const main = document.querySelector('main.main-content');
+  if (sidebar) sidebar.classList.toggle('collapsed', shouldCollapseSidebar);
+  if (main) main.classList.toggle('expanded', shouldCollapseSidebar);
+}
 
 const settingsModules = {
   organization: { icon: 'fa-building', title: 'Organization', description: 'Company identity, operating locations, and regional defaults for this workspace.', items: ['Company Profile', 'Branches', 'Warehouses', 'Financial Year', 'Currency', 'Time Zone'] },
@@ -285,8 +377,8 @@ function handleCreateAction(actionType) {
       break;
     case 'expense':
     case 'pay_out':
-      switchTab('reports');
-      showToast(`Opened Expenses & Reports for ${actionType.replace(/_/g, ' ').toUpperCase()}`, 'info');
+      switchTab('finance');
+      showToast(`Opened Finance for ${actionType.replace(/_/g, ' ').toUpperCase()}`, 'info');
       break;
     case 'customer':
     case 'pay_in':
@@ -305,19 +397,113 @@ function handleCreateAction(actionType) {
 }
 
 // AI Global Search & Shortcuts
+let universalSearchTimer = null;
+let universalSearchItems = [];
+let universalSearchIndex = -1;
+
+function handleUniversalSearchInput(event) {
+  clearTimeout(universalSearchTimer);
+  const query = event.target.value.trim();
+  if (query.length < 2) {
+    closeUniversalSearch();
+    return;
+  }
+  universalSearchTimer = setTimeout(() => loadUniversalSearch(query), 180);
+}
+
+async function loadUniversalSearch(query) {
+  const resultsBox = document.getElementById('universalSearchResults');
+  if (!resultsBox) return;
+  resultsBox.innerHTML = '<div class="universal-search-group">Searching your business...</div>';
+  resultsBox.classList.add('open');
+  try {
+    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { headers: getAuthHeaders() });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'Search failed.');
+    universalSearchItems = [
+      {
+        type: 'ai_command',
+        title: `Ask Copilot: “${query}”`,
+        subtitle: 'Grounded answer · actions require approval',
+        tab: 'automation',
+        query
+      },
+      ...(payload.results || [])
+    ];
+    universalSearchIndex = -1;
+    renderUniversalSearch();
+  } catch (error) {
+    universalSearchItems = [];
+    resultsBox.innerHTML = `<div class="universal-search-group">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderUniversalSearch() {
+  const resultsBox = document.getElementById('universalSearchResults');
+  if (!resultsBox) return;
+  const iconByType = {
+    ai_command: 'fa-sparkles',
+    product: 'fa-box',
+    customer: 'fa-user',
+    supplier: 'fa-truck-field',
+    invoice: 'fa-file-invoice',
+    payment: 'fa-money-bill-transfer',
+    warehouse: 'fa-warehouse'
+  };
+  resultsBox.innerHTML = universalSearchItems.length
+    ? `<div class="universal-search-group">Commands &amp; records</div>${universalSearchItems.map((item, index) => `
+      <button type="button" class="universal-search-item ${index === universalSearchIndex ? 'active' : ''}" role="option" aria-selected="${index === universalSearchIndex}" onclick="activateUniversalSearchResult(${index})">
+        <i class="fa-solid ${iconByType[item.type] || 'fa-magnifying-glass'}"></i>
+        <span class="universal-search-copy"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.subtitle || '')}</span></span>
+        <span class="universal-search-type">${escapeHtml(String(item.type || '').replace('_', ' '))}</span>
+      </button>`).join('')}`
+    : '<div class="universal-search-group">No matching records</div>';
+  resultsBox.classList.add('open');
+  resultsBox.querySelector('.universal-search-item.active')?.scrollIntoView({ block: 'nearest' });
+}
+
+function activateUniversalSearchResult(index) {
+  const item = universalSearchItems[index];
+  if (!item) return;
+  closeUniversalSearch();
+  const input = document.getElementById('globalAISearchInput');
+  if (input) input.value = '';
+  if (item.type === 'ai_command') {
+    askSuggestedQuestion(item.query);
+    return;
+  }
+  switchTab(item.tab || 'dashboard');
+  showToast(`${item.title} opened in ${String(item.type || 'record').replace('_', ' ')} workspace.`, 'success');
+}
+
+function closeUniversalSearch() {
+  const resultsBox = document.getElementById('universalSearchResults');
+  if (resultsBox) {
+    resultsBox.classList.remove('open');
+    resultsBox.innerHTML = '';
+  }
+  universalSearchItems = [];
+  universalSearchIndex = -1;
+}
+
 function handleGlobalAISearch(event) {
-  if (event.key === 'Enter') {
+  if (event.key === 'ArrowDown' && universalSearchItems.length) {
+    event.preventDefault();
+    universalSearchIndex = Math.min(universalSearchIndex + 1, universalSearchItems.length - 1);
+    renderUniversalSearch();
+  } else if (event.key === 'ArrowUp' && universalSearchItems.length) {
+    event.preventDefault();
+    universalSearchIndex = Math.max(universalSearchIndex - 1, 0);
+    renderUniversalSearch();
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
     const query = event.target.value.trim();
     if (!query) return;
-    showToast(`Searching for "${query}" via AI Engine...`, 'info');
-    const posSearch = document.getElementById('posSearchInput');
-    if (posSearch) {
-      switchTab('pos');
-      posSearch.value = query;
-      filterPOSProducts();
-    } else {
-      toggleAiChatDrawer();
-    }
+    if (universalSearchIndex >= 0) activateUniversalSearchResult(universalSearchIndex);
+    else askSuggestedQuestion(query);
+  } else if (event.key === 'Escape') {
+    closeUniversalSearch();
+    event.target.blur();
   }
 }
 
@@ -327,6 +513,7 @@ document.addEventListener('keydown', (e) => {
     const input = document.getElementById('globalAISearchInput');
     if (input) input.focus();
   }
+  if (e.key === 'Escape') closeUniversalSearch();
   if (e.altKey && e.key.toLowerCase() === 'd') {
     e.preventDefault();
     toggleThemeMode();
@@ -349,6 +536,10 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+document.addEventListener('click', event => {
+  if (!event.target.closest('.header-ai-search-box')) closeUniversalSearch();
+});
+
 // Profile Dropdown & Profile Data Updates
 function toggleProfileDropdown(event) {
   if (event) event.stopPropagation();
@@ -365,7 +556,8 @@ function toggleProfileDropdown(event) {
 
 function updateProfileHeaderData() {
   const role = (localStorage.getItem('role') || 'Admin').toUpperCase();
-  const username = localStorage.getItem('username') || 'Admin';
+  const username = localStorage.getItem('username') || 'admin';
+  const displayName = localStorage.getItem('fullName') || username || 'Aman';
   
   const nameEl = document.getElementById('menuHeaderName');
   const emailEl = document.getElementById('menuHeaderEmail');
@@ -377,14 +569,14 @@ function updateProfileHeaderData() {
   const hName = document.getElementById('headerProfileName');
   const hRole = document.getElementById('headerProfileRole');
 
-  if (nameEl) nameEl.innerText = username === 'admin' ? 'System Admin' : username;
+  if (nameEl) nameEl.innerText = username === 'admin' ? 'System Admin' : displayName;
   if (emailEl) emailEl.innerText = `${username.toLowerCase()}@inventia.com`;
   if (phoneEl) phoneEl.innerText = username === 'admin' ? '+91 98765 43210' : '+91 91234 56789';
   if (roleEl) roleEl.innerText = role;
-  if (avatarEl) avatarEl.innerText = username.charAt(0).toUpperCase();
+  if (avatarEl) avatarEl.innerText = displayName.charAt(0).toUpperCase();
 
-  if (hAvatar) hAvatar.innerText = username.charAt(0).toUpperCase();
-  if (hName) hName.innerText = username === 'admin' ? 'Admin' : username;
+  if (hAvatar) hAvatar.innerText = displayName.charAt(0).toUpperCase();
+  if (hName) hName.innerText = username === 'admin' ? 'Admin' : displayName;
   if (hRole) hRole.innerText = role;
 }
 
@@ -394,11 +586,7 @@ function toggleThemeMode() {
   const next = current === 'dark' ? 'light' : 'dark';
   html.setAttribute('data-theme-mode', next);
   localStorage.setItem('themeMode', next);
-
-  const statusEl = document.getElementById('themeSwitchStatus');
-  const iconEl = document.getElementById('themeToggleIcon');
-  if (statusEl) statusEl.innerText = next === 'dark' ? 'Dark' : 'Light';
-  if (iconEl) iconEl.className = next === 'dark' ? 'fa-solid fa-sun text-amber' : 'fa-solid fa-moon text-indigo';
+  syncThemeIndicators();
   
   showToast(`Switched to ${next === 'dark' ? 'Dark' : 'Light'} Daily Mode`, 'info');
 }
@@ -408,6 +596,29 @@ function toggleSidebarMenu() {
   const main = document.querySelector('main.main-content');
   if (sidebar) sidebar.classList.toggle('collapsed');
   if (main) main.classList.toggle('expanded');
+  localStorage.setItem('inventia_sidebar_collapsed', String(sidebar?.classList.contains('collapsed')));
+}
+
+async function ensureRazorpayLoaded() {
+  if (window.Razorpay) return true;
+
+  const existing = document.querySelector('script[data-razorpay-sdk="true"]');
+  if (existing) {
+    return new Promise((resolve, reject) => {
+      existing.addEventListener('load', () => resolve(true), { once: true });
+      existing.addEventListener('error', () => reject(new Error('Razorpay SDK failed to load.')), { once: true });
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.dataset.razorpaySdk = 'true';
+    script.onload = () => resolve(true);
+    script.onerror = () => reject(new Error('Razorpay SDK failed to load.'));
+    document.head.appendChild(script);
+  });
 }
 
 // Profile Modal Actions
@@ -505,9 +716,9 @@ window.fetch = function (url, options = {}) {
 
 // Auth and Session Helper Functions
 function getAuthHeaders(extraHeaders = {}) {
-  const token = localStorage.getItem('token') || 'mock-token';
-  const role = localStorage.getItem('role') || 'admin';
-  const userId = localStorage.getItem('userId') || '1';
+  const token = localStorage.getItem('token') || '';
+  const role = localStorage.getItem('role') || '';
+  const userId = localStorage.getItem('userId') || '';
   return {
     'Authorization': `Bearer ${token}`,
     'x-user-role': role,
@@ -627,6 +838,7 @@ async function handleLoginSubmit(event) {
 }
 
 function logout() {
+  currentAiConversationId = null;
   localStorage.clear();
   
   // Show Login Overlay
@@ -657,6 +869,8 @@ function initializePOSApp() {
   populateDropdowns();
   switchSubTab('categories-manager');
   startLiveTimestamp();
+  loadDashboardAi();
+  loadAiStatus();
   
   // Connect APIs if online
   fetch('/api/status')
@@ -775,6 +989,7 @@ function updateWorkspaceLabel(name, description) {
 
 // Initialize UI
 document.addEventListener('DOMContentLoaded', () => {
+  restoreInterfacePreferences();
   initNotifications();
   const token = localStorage.getItem('token');
   if (token) {
@@ -799,11 +1014,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Sync data from database APIs if available
 async function syncWithBackend() {
   try {
-    const headers = {
-      'Authorization': 'Bearer mock-token',
-      'x-user-role': 'admin',
-      'x-user-id': '1'
-    };
+    const headers = apiHeaders();
 
     const pRes = await fetch('/api/inventory/products', { headers });
     if (pRes.ok) products = await pRes.json();
@@ -1020,6 +1231,8 @@ function switchTab(tabName, reportType = null, sourceItem = null) {
   targetPanel.classList.add('active');
   currentTab = tabName;
   window.scrollTo(0, 0);
+  if (tabName === 'finance') loadFinanceWorkspace();
+  if (tabName === 'automation') loadAiWorkspace();
 }
 
 // ================= MODULE 1: DASHBOARD =================
@@ -1097,12 +1310,10 @@ function loadDashboardData() {
       `;
     } else {
       bestSelling.slice(0, 5).forEach(p => {
-        const photoUrl = p.image_url || 'https://images.unsplash.com/photo-1582176647444-f7b60e6f7734?w=400';
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td style="display:flex; align-items:center; gap:10px;">
-            <img src="${photoUrl}" style="width:36px; height:36px; border-radius:6px; object-fit:cover;">
-            <strong>${p.name}</strong>
+          <td class="table-product-cell">
+            ${renderTableProductLabel(p.name)}
           </td>
           <td>${currencySymbol}${(p.selling_price || 0).toFixed(2)}</td>
           <td>${p.sales_count || 0}</td>
@@ -1129,12 +1340,10 @@ function loadDashboardData() {
       `;
     } else {
       lowStockProducts.forEach(p => {
-        const photoUrl = p.image_url || 'https://images.unsplash.com/photo-1582176647444-f7b60e6f7734?w=400';
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td style="display:flex; align-items:center; gap:10px;">
-            <img src="${photoUrl}" style="width:36px; height:36px; border-radius:6px; object-fit:cover;">
-            <strong>${p.name}</strong>
+          <td class="table-product-cell">
+            ${renderTableProductLabel(p.name)}
           </td>
           <td>#${p.id}</td>
           <td>${p.stock || 0}</td>
@@ -1221,23 +1430,21 @@ function loadPOSCatalog(filteredList = null) {
     const catName = categories.find(c => c.id === p.category_id)?.name || 'General';
     const card = document.createElement('div');
     card.className = 'pos-item-card';
-    card.style.cssText = 'background: white; border-radius: var(--radius-md); border: 1px solid var(--border-color); padding: 14px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.03); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;';
     card.onclick = () => addToCart(p.id);
-    
-    // Photo preview fallback
-    const photoUrl = p.image_url || 'https://images.unsplash.com/photo-1582176647444-f7b60e6f7734?w=400';
+    const photoUrl = resolveProductImage(p.image_url, p.name);
+    const fallbackPhoto = buildProductFallbackImage(p.name);
 
     card.innerHTML = `
-      <div>
-        <div style="width: 100%; height: 130px; border-radius: var(--radius-sm); overflow: hidden; background-color: #f8fafc; margin-bottom: 10px;">
-          <img src="${photoUrl}" alt="${p.name}" style="width: 100%; height: 100%; object-fit: cover;">
+      <div class="pos-item-content">
+        <div class="pos-item-media">
+          <img src="${photoUrl}" alt="${escapeHtml(p.name)}" onerror="this.onerror=null;this.src='${fallbackPhoto}';">
         </div>
-        <h5 style="font-size: 0.95rem; font-weight: 700; color: var(--text-main); margin-bottom: 4px; line-height: 1.3;">${p.name}</h5>
-        <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 8px;">${catName}</span>
-        <div style="font-size: 1.15rem; font-weight: 800; color: var(--primary); margin-bottom: 4px;">${currencySymbol}${p.selling_price.toFixed(2)}</div>
-        <span style="font-size: 0.75rem; color: ${(p.stock || 0) < p.min_stock_alert ? 'var(--alert)' : 'var(--text-muted)'}; display: block; margin-bottom: 12px; font-weight: 600;">Stock: ${p.stock || 0}</span>
+        <h5 class="pos-item-title">${escapeHtml(p.name)}</h5>
+        <span class="pos-item-category">${escapeHtml(catName)}</span>
+        <div class="pos-item-price">${currencySymbol}${p.selling_price.toFixed(2)}</div>
+        <span class="pos-item-stock ${(p.stock || 0) < p.min_stock_alert ? 'is-low' : ''}">Stock: ${p.stock || 0}</span>
       </div>
-      <button style="width: 100%; padding: 10px; background-color: var(--primary); color: white; border: none; border-radius: var(--radius-sm); font-family: var(--font-family); font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.85rem;">
+      <button class="action-btn primary pos-item-action">
         <i class="fa-solid fa-cart-shopping"></i> Add to Cart
       </button>
     `;
@@ -1424,12 +1631,13 @@ async function submitPOSCheckout() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer mock-token',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'x-user-role': 'cashier'
         },
         body: JSON.stringify({ amount: grandTotalCalc, receipt: 'rcpt_' + Date.now() })
       });
       const orderData = await orderRes.json();
+      await ensureRazorpayLoaded();
 
       if (window.Razorpay) {
         const options = {
@@ -1475,7 +1683,7 @@ async function executeFinalCheckoutPayload(payload) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer mock-token',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'x-user-role': 'cashier',
           'x-user-id': '1'
         },
@@ -1857,7 +2065,7 @@ async function submitStockTransfer(event) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-token',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         'x-user-role': 'manager',
         'x-user-id': '1'
       },
@@ -2024,7 +2232,7 @@ async function submitStockAdjustment(event) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-token',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         'x-user-role': 'manager',
         'x-user-id': '1'
       },
@@ -2217,7 +2425,7 @@ async function submitNewBrand(event) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-token',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         'x-user-role': 'manager'
       },
       body: JSON.stringify(payload)
@@ -2254,7 +2462,7 @@ async function submitNewCategory(event) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-token',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         'x-user-role': 'manager'
       },
       body: JSON.stringify(payload)
@@ -2320,7 +2528,7 @@ async function submitNewStaff(event) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-token',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         'x-user-role': 'admin'
       },
       body: JSON.stringify(payload)
@@ -2347,7 +2555,7 @@ async function toggleUserStatus(userId, currentStatus) {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer mock-token',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'x-user-role': 'admin'
         },
         body: JSON.stringify({ status: newStatus })
@@ -2403,7 +2611,7 @@ async function submitSettings(event) {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-token',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         'x-user-role': 'admin'
       },
       body: JSON.stringify(payload)
@@ -2770,7 +2978,7 @@ async function submitNewCategoryModal(event) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-token',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         'x-user-role': 'manager'
       },
       body: JSON.stringify(payload)
@@ -2809,7 +3017,7 @@ async function deleteCategory(catId) {
       const res = await fetch(`/api/inventory/categories/${catId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': 'Bearer mock-token',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'x-user-role': 'admin'
         }
       });
@@ -2839,7 +3047,7 @@ async function editCategory(catId) {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer mock-token',
+            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
             'x-user-role': 'manager'
           },
           body: JSON.stringify(payload)
@@ -2894,21 +3102,32 @@ function exportActiveReportToCSV() {
 }
 
 // ================= BARCODE VIEWER OPERATIONS =================
-function openBarcodeModal(productId) {
+async function openBarcodeModal(productId) {
   const product = products.find(p => p.id === productId);
   if (product) {
     document.getElementById('barcodeProductTitle').innerText = product.name;
-    
-    // Generate barcode using JsBarcode
-    JsBarcode("#barcodeImage", product.barcode || product.sku, {
-      format: "CODE128",
-      width: 2,
-      height: 60,
-      displayValue: true,
-      lineColor: "#0f172a"
-    });
-    
+    const image = document.getElementById('barcodeImage');
+    image.removeAttribute('data-document-id');
+    image.removeAttribute('data-download-url');
     document.getElementById('barcodeModal').classList.add('active');
+    try {
+      const response = await fetch('/api/barcodes/generate', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          value: product.barcode || product.sku,
+          format: 'code128',
+          product_id: product.id
+        })
+      });
+      const generated = await response.json();
+      if (!response.ok) throw new Error(generated.error || 'Barcode generation failed.');
+      image.src = generated.data_url;
+      image.dataset.documentId = generated.id;
+      image.dataset.downloadUrl = generated.download_url;
+    } catch (error) {
+      showToast(error.message, 'error');
+    }
   }
 }
 
@@ -2916,85 +3135,157 @@ function closeBarcodeModal() {
   document.getElementById('barcodeModal').classList.remove('active');
 }
 
+async function downloadCurrentBarcode() {
+  const image = document.getElementById('barcodeImage');
+  if (!image?.dataset.downloadUrl) return showToast('Generate the barcode first.', 'info');
+  const response = await fetch(image.dataset.downloadUrl, { headers: getAuthHeaders() });
+  if (!response.ok) return showToast('Unable to download this barcode.', 'error');
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${document.getElementById('barcodeProductTitle').innerText.replace(/\s+/g, '-')}-barcode.png`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function printCurrentBarcode() {
+  const image = document.getElementById('barcodeImage');
+  if (!image?.dataset.documentId) return showToast('Generate the barcode first.', 'info');
+  const response = await fetch('/api/barcodes/print', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ document_file_id: image.dataset.documentId, copies: 1, paper_size: '40x20', printer: 'browser' })
+  });
+  if (!response.ok) return showToast('Unable to create the print job.', 'error');
+  window.print();
+}
+
+// ================= PHASE 3: FINANCE & ACCOUNTING =================
+let financeAccounts = [];
+
+async function loadFinanceWorkspace() {
+  try {
+    const [summaryResponse, accountsResponse, journalsResponse] = await Promise.all([
+      fetch('/api/finance/summary', { headers: getAuthHeaders() }),
+      fetch('/api/accounts', { headers: getAuthHeaders() }),
+      fetch('/api/journals', { headers: getAuthHeaders() })
+    ]);
+    if (!summaryResponse.ok || !accountsResponse.ok || !journalsResponse.ok) {
+      throw new Error('Finance data could not be loaded.');
+    }
+    const summary = await summaryResponse.json();
+    financeAccounts = await accountsResponse.json();
+    const journals = await journalsResponse.json();
+    setFinanceMoney('financeIncome', summary.total_income);
+    setFinanceMoney('financeExpenses', summary.total_expenses);
+    setFinanceMoney('financeProfit', summary.net_profit);
+    setFinanceMoney('financeReceivable', summary.outstanding_receivable);
+    renderFinanceAccounts(financeAccounts);
+    renderFinanceJournals(journals);
+    populateFinanceAccountSelectors();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+function setFinanceMoney(id, value) {
+  const element = document.getElementById(id);
+  if (element) element.textContent = `${currencySymbol}${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function renderFinanceAccounts(accounts) {
+  const body = document.getElementById('financeAccountsTable');
+  if (!body) return;
+  body.innerHTML = accounts.length ? accounts.map(account => `
+    <tr>
+      <td><strong>${escapeHtml(account.code)}</strong></td>
+      <td>${escapeHtml(account.name)}</td>
+      <td><span class="status-badge ${account.account_type === 'income' ? 'completed' : ''}">${escapeHtml(account.account_type)}</span></td>
+      <td>${currencySymbol}${Number(account.opening_balance || 0).toFixed(2)}</td>
+    </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;">No accounts found.</td></tr>';
+}
+
+function renderFinanceJournals(journals) {
+  const body = document.getElementById('financeJournalsTable');
+  if (!body) return;
+  body.innerHTML = journals.length ? journals.slice(0, 20).map(journal => `
+    <tr>
+      <td><strong>${escapeHtml(journal.journal_no)}</strong></td>
+      <td>${new Date(journal.journal_date).toLocaleDateString()}</td>
+      <td>${escapeHtml(journal.journal_type)}</td>
+      <td>${currencySymbol}${Number(journal.total_debit || 0).toFixed(2)}</td>
+    </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;">No journals posted yet.</td></tr>';
+}
+
+function populateFinanceAccountSelectors() {
+  const options = financeAccounts.map(account => `<option value="${account.id}">${escapeHtml(account.code)} — ${escapeHtml(account.name)}</option>`).join('');
+  ['financeDebitAccount', 'financeCreditAccount'].forEach(id => {
+    const select = document.getElementById(id);
+    if (select) select.innerHTML = `<option value="">Select account</option>${options}`;
+  });
+}
+
+function openFinanceJournalModal() {
+  if (!financeAccounts.length) loadFinanceWorkspace();
+  const date = document.getElementById('financeJournalDate');
+  if (date) date.value = new Date().toISOString().slice(0, 10);
+  document.getElementById('financeJournalModal')?.classList.add('active');
+}
+
+function closeFinanceJournalModal() {
+  document.getElementById('financeJournalModal')?.classList.remove('active');
+}
+
+async function submitFinanceJournal(event) {
+  event.preventDefault();
+  const amount = Number(document.getElementById('financeJournalAmount').value);
+  const debitAccount = Number(document.getElementById('financeDebitAccount').value);
+  const creditAccount = Number(document.getElementById('financeCreditAccount').value);
+  if (debitAccount === creditAccount) return showToast('Debit and credit accounts must be different.', 'error');
+  const response = await fetch('/api/journals', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({
+      journal_type: 'general',
+      journal_date: document.getElementById('financeJournalDate').value,
+      reference: document.getElementById('financeJournalReference').value.trim(),
+      description: document.getElementById('financeJournalDescription').value.trim(),
+      entries: [
+        { account_id: debitAccount, debit: amount, credit: 0 },
+        { account_id: creditAccount, debit: 0, credit: amount }
+      ]
+    })
+  });
+  const result = await response.json();
+  if (!response.ok) return showToast(result.error || 'Unable to post journal.', 'error');
+  document.getElementById('financeJournalForm').reset();
+  closeFinanceJournalModal();
+  await loadFinanceWorkspace();
+  showToast(`Journal ${result.journal_no} posted successfully.`, 'success');
+}
+
+async function createFinanceAccount() {
+  const code = window.prompt('Account code (for example 5300):');
+  if (!code) return;
+  const name = window.prompt('Account name:');
+  if (!name) return;
+  const accountType = window.prompt('Account type: asset, liability, income, expense, or equity', 'expense')?.toLowerCase();
+  if (!accountType) return;
+  const response = await fetch('/api/accounts', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ code, name, account_type: accountType })
+  });
+  const result = await response.json();
+  if (!response.ok) return showToast(result.error || 'Unable to create account.', 'error');
+  await loadFinanceWorkspace();
+  showToast(`Account ${result.code} created.`, 'success');
+}
+
 // ================= CHART.JS DASHBOARD INITIALIZATION =================
 function initDashboardCharts() {
-  if (typeof Chart === 'undefined') return;
-
-  // 1. Weekly Sales Performance (Line Chart)
-  const ctxWeekly = document.getElementById('weeklySalesChart');
-  if (ctxWeekly) {
-    new Chart(ctxWeekly, {
-      type: 'line',
-      data: {
-        labels: ['Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue'],
-        datasets: [{
-          label: 'Revenue ($)',
-          data: [0, 0, 0, 0, 0, 0, 80],
-          borderColor: '#2563eb',
-          backgroundColor: 'rgba(37, 99, 235, 0.15)',
-          fill: true,
-          tension: 0.4,
-          pointBackgroundColor: '#2563eb',
-          pointRadius: 5
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
-          x: { grid: { display: false } }
-        }
-      }
-    });
-  }
-
-  // 2. Top Products (Bar Chart)
-  const ctxTop = document.getElementById('topProductsChart');
-  if (ctxTop) {
-    new Chart(ctxTop, {
-      type: 'bar',
-      data: {
-        labels: ['Gardening Tools Set', 'Coffee Beans'],
-        datasets: [{
-          label: 'Sales Count',
-          data: [1, 1],
-          backgroundColor: ['#6366f1', '#3b82f6'],
-          borderRadius: 6
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          y: { beginAtZero: true, ticks: { stepSize: 1 } },
-          x: { grid: { display: false } }
-        }
-      }
-    });
-  }
-
-  // 3. Payment Methods (Doughnut Chart)
-  const ctxPay = document.getElementById('paymentMethodsChart');
-  if (ctxPay) {
-    new Chart(ctxPay, {
-      type: 'doughnut',
-      data: {
-        labels: ['Card', 'Cash'],
-        datasets: [{
-          data: [1, 1],
-          backgroundColor: ['#2563eb', '#60a5fa']
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: 'bottom' } }
-      }
-    });
-  }
+  renderDashboardCharts();
 }
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -3095,7 +3386,7 @@ async function submitEditCategoryModal(event) {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-token',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         'x-user-role': 'manager'
       },
       body: JSON.stringify(payload)
@@ -3171,7 +3462,7 @@ async function submitNewBrandModal(event) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-token',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         'x-user-role': 'manager'
       },
       body: JSON.stringify(payload)
@@ -3225,7 +3516,7 @@ async function submitEditBrandModal(event) {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-token',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         'x-user-role': 'manager'
       },
       body: JSON.stringify(payload)
@@ -3253,7 +3544,7 @@ async function deleteBrand(brandId) {
       const res = await fetch(`/api/inventory/brands/${brandId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': 'Bearer mock-token',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'x-user-role': 'admin'
         }
       });
@@ -3348,7 +3639,7 @@ async function submitNewWarehouseModal(event) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-token',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         'x-user-role': 'manager'
       },
       body: JSON.stringify(payload)
@@ -3405,7 +3696,7 @@ async function submitEditWarehouseModal(event) {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-token',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         'x-user-role': 'manager'
       },
       body: JSON.stringify(payload)
@@ -3434,7 +3725,7 @@ async function deleteWarehouse(whId) {
       const res = await fetch(`/api/inventory/warehouses/${whId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': 'Bearer mock-token',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'x-user-role': 'admin'
         }
       });
@@ -3455,9 +3746,26 @@ async function deleteWarehouse(whId) {
 // FLOATING AI CHAT WIDGET & AI INTEGRATION SETTINGS LOGIC
 // ================================================================
 
-function toggleAiChatDrawer() {
+let currentAiConversationId = null;
+
+function toggleAiChatDrawer(forceOpen = null) {
   const drawer = document.getElementById('aiChatDrawer');
-  if (drawer) drawer.classList.toggle('active');
+  if (!drawer) return;
+  if (forceOpen === true) drawer.classList.add('active');
+  else if (forceOpen === false) drawer.classList.remove('active');
+  else drawer.classList.toggle('active');
+  if (drawer.classList.contains('active')) {
+    loadAiStatus();
+    setTimeout(() => document.getElementById('aiChatInput')?.focus(), 120);
+  }
+}
+
+function askSuggestedQuestion(question) {
+  const input = document.getElementById('aiChatInput');
+  if (!input) return;
+  toggleAiChatDrawer(true);
+  input.value = question;
+  document.getElementById('aiChatForm')?.requestSubmit();
 }
 
 async function sendAiMessage(event) {
@@ -3487,50 +3795,309 @@ async function sendAiMessage(event) {
   try {
     const res = await fetch('/api/ai/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-token'
-      },
-      body: JSON.stringify({ message: query })
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        message: query,
+        conversation_id: currentAiConversationId,
+        source: currentTab === 'automation' ? 'ai_workspace' : 'assistant_drawer'
+      })
     });
 
-    if (messagesContainer.contains(typingDiv)) {
-      messagesContainer.removeChild(typingDiv);
-    }
+    typingDiv.remove();
 
-    if (!res.ok) throw new Error('API failure');
     const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Copilot request failed.');
+    currentAiConversationId = data.conversation_id;
+    setAiProviderLabels(data);
 
-    // Append Agent Response
     const agentDiv = document.createElement('div');
     agentDiv.className = 'chat-msg agent';
-    agentDiv.innerHTML = formatMarkdown(data.reply);
+    agentDiv.innerHTML = renderAiResponse(data);
     messagesContainer.appendChild(agentDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    if ((data.proposed_actions || []).length) loadAiWorkspace();
   } catch (err) {
     console.error('Chat API failed:', err);
-    if (messagesContainer.contains(typingDiv)) {
-      messagesContainer.removeChild(typingDiv);
-    }
+    typingDiv.remove();
     const errDiv = document.createElement('div');
     errDiv.className = 'chat-msg agent';
-    errDiv.innerText = 'Sorry, I am having trouble connecting to the POS server right now. Please try again.';
+    errDiv.innerText = err.message || 'The Business Copilot is unavailable. Please try again.';
     messagesContainer.appendChild(errDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 }
 
 function formatMarkdown(text) {
-  return text
+  return escapeHtml(text || '')
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/`(.*?)`/g, '<code>$1</code>')
     .replace(/\n/g, '<br>');
 }
 
-function submitAiSettings(event) {
+function renderAiResponse(data) {
+  const cards = (data.cards || []).map(card => `
+    <div class="ai-response-card">
+      <strong>${escapeHtml(card.title)}</strong>
+      <span>${escapeHtml(card.value)}${card.trend ? ` · ${escapeHtml(card.trend)}` : ''}</span>
+    </div>`).join('');
+  const sources = (data.sources || []).map(source => `
+    <div class="ai-source-item"><strong>${escapeHtml(source.label || source.type)}</strong><br>${escapeHtml(source.type || 'business data')}</div>`).join('');
+  const proposals = (data.proposed_actions || []).map(renderAiProposalCard).join('');
+  return `
+    <div>${formatMarkdown(data.answer)}</div>
+    ${cards ? `<div class="ai-response-cards">${cards}</div>` : ''}
+    ${sources ? `<div class="ai-source-list"><div class="universal-search-group">Evidence</div>${sources}</div>` : ''}
+    ${proposals ? `<div class="ai-proposal-list"><div class="universal-search-group">Approval required</div>${proposals}</div>` : ''}
+    <div class="ai-response-meta">${escapeHtml(data.provider || 'local')}${data.fallback ? ' · deterministic fallback' : ''}</div>`;
+}
+
+function renderAiProposalCard(proposal) {
+  const payload = proposal.payload || {};
+  const itemCount = Array.isArray(payload.items) ? payload.items.length : null;
+  return `<article class="ai-proposal-card" data-proposal-id="${escapeHtml(proposal.id)}">
+    <header>
+      <div><strong>${escapeHtml(proposal.title || proposal.action_type)}</strong><div>${escapeHtml(proposal.reason || 'Generated from grounded business data.')}</div></div>
+      <span class="status-badge ${proposal.status === 'approved' ? 'completed' : proposal.status === 'pending' ? 'pending' : 'cancelled'}">${escapeHtml(proposal.status || 'pending')}</span>
+    </header>
+    <div>${itemCount == null ? escapeHtml(previewActionPayload(payload)) : `${itemCount} item${itemCount === 1 ? '' : 's'} · ${escapeHtml(previewActionPayload(payload))}`}</div>
+    ${proposal.status === 'pending' ? `<div class="ai-proposal-actions">
+      <button class="action-btn primary compact" onclick="approveAiAction('${escapeHtml(proposal.id)}')"><i class="fa-solid fa-check"></i> Approve</button>
+      <button class="action-btn secondary compact" onclick="rejectAiAction('${escapeHtml(proposal.id)}')"><i class="fa-solid fa-xmark"></i> Reject</button>
+    </div>` : ''}
+  </article>`;
+}
+
+function previewActionPayload(payload) {
+  const values = [];
+  if (payload.total) values.push(`Total ${currencySymbol}${Number(payload.total).toFixed(2)}`);
+  if (payload.amount) values.push(`Amount ${currencySymbol}${Number(payload.amount).toFixed(2)}`);
+  if (payload.quantity) values.push(`Quantity ${Number(payload.quantity)}`);
+  if (payload.warehouse_id) values.push(`Warehouse #${payload.warehouse_id}`);
+  if (payload.supplier_id) values.push(`Supplier #${payload.supplier_id}`);
+  return values.join(' · ') || 'Open to review the validated details before execution.';
+}
+
+async function approveAiAction(id) {
+  if (!window.confirm('Approve and execute this validated business action?')) return;
+  await updateAiAction(id, 'approve');
+}
+
+async function rejectAiAction(id) {
+  const reason = window.prompt('Why are you rejecting this proposal?', 'Not required now');
+  if (reason === null) return;
+  await updateAiAction(id, 'reject', { reason });
+}
+
+async function updateAiAction(id, operation, body = {}) {
+  try {
+    const response = await fetch(`/api/ai/actions/${encodeURIComponent(id)}/${operation}`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(body)
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || `Unable to ${operation} proposal.`);
+    showToast(operation === 'approve' ? 'Proposal approved and executed.' : 'Proposal rejected.', 'success');
+    await loadAiWorkspace();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function loadAiStatus() {
+  try {
+    const response = await fetch('/api/ai/status', { headers: getAuthHeaders() });
+    const status = await response.json();
+    if (!response.ok) throw new Error(status.error || 'AI status unavailable.');
+    setAiProviderLabels(status);
+    const modelSelect = document.getElementById('setAiModel');
+    if (modelSelect) {
+      const desired = status.configured ? status.model : 'local';
+      if ([...modelSelect.options].some(option => option.value === desired)) modelSelect.value = desired;
+    }
+    const connection = document.getElementById('setAiConnectionStatus');
+    if (connection) connection.value = status.configured ? 'OpenAI configured securely on server' : 'Local fallback active · add OPENAI_API_KEY on server';
+    return status;
+  } catch (error) {
+    const connection = document.getElementById('setAiConnectionStatus');
+    if (connection) connection.value = error.message;
+    return null;
+  }
+}
+
+function setAiProviderLabels(status) {
+  const label = status.fallback || !status.configured
+    ? 'Local intelligence · fallback active'
+    : `${status.provider || 'OpenAI'} · ${status.model || 'configured'}`;
+  ['aiDrawerProvider', 'aiWorkspaceProvider', 'dashboardAiProvider'].forEach(id => {
+    const element = document.getElementById(id);
+    if (!element) return;
+    element.textContent = label;
+    element.classList.toggle('pending', Boolean(status.fallback || !status.configured));
+    element.classList.toggle('completed', !status.fallback && status.configured !== false);
+  });
+}
+
+async function submitAiSettings(event) {
   event.preventDefault();
-  alert('AI Agent API integration parameters saved and verified!');
+  const status = await loadAiStatus();
+  if (status) {
+    showToast(status.configured
+      ? `Business Copilot is connected to ${status.model}.`
+      : 'Deterministic local intelligence is active. Configure OPENAI_API_KEY on the server to enable OpenAI.', 'info');
+  }
+}
+
+async function loadDashboardAi() {
+  const score = document.getElementById('dashboardHealthScore');
+  if (!score || !localStorage.getItem('token')) return;
+  try {
+    const response = await fetch('/api/ai/insights', { headers: getAuthHeaders() });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'AI summary unavailable.');
+    renderBusinessHealth(data.health, 'dashboard');
+    renderAiInsights(document.getElementById('dashboardAiInsights'), data.insights);
+    loadAiStatus();
+  } catch (error) {
+    const container = document.getElementById('dashboardAiInsights');
+    if (container) container.innerHTML = `<div class="ai-insight-item danger"><i class="fa-solid fa-triangle-exclamation"></i><div><strong>Summary unavailable</strong><span>${escapeHtml(error.message)}</span></div></div>`;
+  }
+}
+
+function renderBusinessHealth(health, target = 'dashboard') {
+  if (!health) return;
+  const label = String(health.status || 'attention').replace('_', ' ');
+  if (target === 'dashboard') {
+    document.getElementById('dashboardHealthScore').textContent = `${health.score}/100`;
+    document.getElementById('dashboardHealthLabel').textContent = label;
+    const metrics = document.getElementById('dashboardHealthMetrics');
+    if (metrics) metrics.innerHTML = `
+      <div><span>Revenue trend</span><strong>${Number(health.sales_trend_percent).toFixed(1)}%</strong></div>
+      <div><span>Inventory health</span><strong>${Number(health.inventory_score).toFixed(0)}/100</strong></div>
+      <div><span>Receivables</span><strong>${currencySymbol}${Number(health.outstanding_receivable).toLocaleString()}</strong></div>
+      <div><span>Cash position</span><strong>${currencySymbol}${Number(health.cash_flow).toLocaleString()}</strong></div>`;
+  } else {
+    document.getElementById('aiHealthScore').textContent = `${health.score}/100`;
+    document.getElementById('aiHealthStatus').textContent = label;
+    document.getElementById('aiRevenue30d').textContent = `${currencySymbol}${Number(health.revenue_30d).toLocaleString()}`;
+  }
+}
+
+function renderAiInsights(container, insights = []) {
+  if (!container) return;
+  const iconByType = { inventory: 'fa-boxes-stacked', finance: 'fa-wallet', sales: 'fa-chart-line' };
+  container.innerHTML = insights.length ? insights.map(insight => {
+    const tone = insight.severity === 'critical' ? 'danger' : insight.severity === 'positive' ? 'success' : 'warning';
+    return `<div class="ai-insight-item ${tone}"><i class="fa-solid ${iconByType[insight.type] || 'fa-sparkles'}"></i><div><strong>${escapeHtml(insight.title)}</strong><span>${escapeHtml(insight.message)} ${escapeHtml(insight.action || '')}</span></div></div>`;
+  }).join('') : '<div class="ai-insight-item success"><i class="fa-solid fa-circle-check"></i><div><strong>No urgent alerts</strong><span>Inventia found no immediate business risks in the available records.</span></div></div>';
+}
+
+async function loadAiWorkspace() {
+  if (!document.getElementById('aiHealthScore')) return;
+  try {
+    const [insightsResponse, forecastResponse, actionsResponse, knowledgeResponse, status] = await Promise.all([
+      fetch('/api/ai/insights', { headers: getAuthHeaders() }),
+      fetch('/api/ai/forecast/inventory?days=30', { headers: getAuthHeaders() }),
+      fetch('/api/ai/actions?status=pending', { headers: getAuthHeaders() }),
+      fetch('/api/ai/knowledge', { headers: getAuthHeaders() }),
+      loadAiStatus()
+    ]);
+    const [insights, forecast, actions, knowledge] = await Promise.all([
+      insightsResponse.json(), forecastResponse.json(), actionsResponse.json(), knowledgeResponse.json()
+    ]);
+    if (!insightsResponse.ok) throw new Error(insights.error || 'Insights unavailable.');
+    if (!forecastResponse.ok) throw new Error(forecast.error || 'Forecast unavailable.');
+    if (!actionsResponse.ok) throw new Error(actions.error || 'Proposals unavailable.');
+    if (!knowledgeResponse.ok) throw new Error(knowledge.error || 'Knowledge unavailable.');
+    renderBusinessHealth(insights.health, 'workspace');
+    renderAiInsights(document.getElementById('aiWorkspaceInsights'), insights.insights);
+    const reorder = (forecast.items || []).filter(item => item.reorder_quantity > 0);
+    document.getElementById('aiReorderCount').textContent = reorder.length;
+    document.getElementById('aiPendingActions').textContent = actions.length;
+    renderAiForecast(forecast.items || []);
+    document.getElementById('aiActionProposalList').innerHTML = actions.length
+      ? actions.map(renderAiProposalCard).join('')
+      : '<div class="workspace-empty-state compact"><i class="fa-solid fa-clipboard-check"></i><p>No pending proposals.</p></div>';
+    renderAiKnowledge(knowledge);
+    if (status) setAiProviderLabels(status);
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+function renderAiForecast(items) {
+  const table = document.getElementById('aiForecastTable');
+  if (!table) return;
+  const relevant = [...items].filter(item => item.reorder_quantity > 0).slice(0, 12);
+  table.innerHTML = relevant.length ? relevant.map(item => `
+    <tr>
+      <td><strong>${escapeHtml(item.name)}</strong><br><small>${escapeHtml(item.sku)}</small></td>
+      <td>${Number(item.current_stock)}</td>
+      <td>${Number(item.forecast_demand).toFixed(1)}</td>
+      <td><strong>${Number(item.reorder_quantity)}</strong></td>
+      <td><span class="status-badge ${item.risk === 'critical' ? 'cancelled' : 'pending'}">${escapeHtml(item.risk)}</span></td>
+    </tr>`).join('') : '<tr><td colspan="5">Stock is sufficient against the available 30-day demand forecast.</td></tr>';
+}
+
+async function submitAiKnowledge(event) {
+  event.preventDefault();
+  const title = document.getElementById('aiKnowledgeTitle').value.trim();
+  const content = document.getElementById('aiKnowledgeContent').value.trim();
+  const tags = document.getElementById('aiKnowledgeTags').value.trim();
+  try {
+    const response = await fetch('/api/ai/knowledge', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ title, content, tags })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'Unable to add knowledge.');
+    event.target.reset();
+    showToast('Knowledge document added.', 'success');
+    loadAiWorkspace();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+function renderAiKnowledge(documents = []) {
+  const container = document.getElementById('aiKnowledgeList');
+  if (!container) return;
+  container.innerHTML = documents.length ? documents.slice(0, 12).map(document => `
+    <article class="ai-knowledge-item">
+      <header><div><strong>${escapeHtml(document.title)}</strong><div>${escapeHtml(document.tags || 'No tags')}</div></div><span class="status-badge ${document.status === 'active' ? 'completed' : 'pending'}">${escapeHtml(document.status)}</span></header>
+      <div>${escapeHtml(String(document.content || '').slice(0, 180))}${String(document.content || '').length > 180 ? '…' : ''}</div>
+      <div class="ai-proposal-actions">
+        <button class="action-btn secondary compact" onclick="archiveAiKnowledge('${escapeHtml(document.id)}', '${document.status === 'active' ? 'archived' : 'active'}')">${document.status === 'active' ? 'Archive' : 'Restore'}</button>
+        <button class="action-btn secondary compact" onclick="deleteAiKnowledge('${escapeHtml(document.id)}')">Delete</button>
+      </div>
+    </article>`).join('') : '<div class="workspace-empty-state compact"><i class="fa-solid fa-book-open"></i><p>No knowledge documents yet.</p></div>';
+}
+
+async function archiveAiKnowledge(id, status) {
+  await mutateAiKnowledge(`/api/ai/knowledge/${encodeURIComponent(id)}`, 'PUT', { status }, status === 'active' ? 'Knowledge restored.' : 'Knowledge archived.');
+}
+
+async function deleteAiKnowledge(id) {
+  if (!window.confirm('Delete this knowledge document?')) return;
+  await mutateAiKnowledge(`/api/ai/knowledge/${encodeURIComponent(id)}`, 'DELETE', null, 'Knowledge document deleted.');
+}
+
+async function mutateAiKnowledge(url, method, body, successMessage) {
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: getAuthHeaders(),
+      body: body ? JSON.stringify(body) : undefined
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'Knowledge update failed.');
+    showToast(successMessage, 'success');
+    loadAiWorkspace();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
 }
 
 function startLiveTimestamp() {

@@ -318,3 +318,514 @@ CREATE INDEX IF NOT EXISTS idx_sales_invoice ON sales(invoice_no);
 CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales(customer_id);
 CREATE INDEX IF NOT EXISTS idx_warehouse_stock_lookup ON warehouse_stock(warehouse_id, product_id);
 CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id);
+
+-- Phase 1 purchasing and event-ledger modules
+CREATE TABLE IF NOT EXISTS suppliers (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  phone VARCHAR(50),
+  email VARCHAR(255),
+  gstin VARCHAR(50),
+  address TEXT,
+  payment_terms INT DEFAULT 0,
+  status SMALLINT DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  id SERIAL PRIMARY KEY,
+  order_no VARCHAR(100) UNIQUE NOT NULL,
+  supplier_id INT NOT NULL REFERENCES suppliers(id),
+  warehouse_id INT NOT NULL REFERENCES warehouses(id),
+  status VARCHAR(30) DEFAULT 'draft',
+  expected_date DATE,
+  received_at TIMESTAMPTZ,
+  notes TEXT,
+  total DECIMAL(12,2) NOT NULL DEFAULT 0,
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS purchase_order_items (
+  id SERIAL PRIMARY KEY,
+  purchase_order_id INT NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+  product_id INT NOT NULL REFERENCES products(id),
+  quantity INT NOT NULL CHECK (quantity > 0),
+  received_quantity INT DEFAULT 0,
+  unit_cost DECIMAL(12,2) NOT NULL CHECK (unit_cost >= 0),
+  line_total DECIMAL(12,2) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS domain_events (
+  id BIGSERIAL PRIMARY KEY,
+  event_type VARCHAR(100) NOT NULL,
+  entity_type VARCHAR(100) NOT NULL,
+  entity_id VARCHAR(100) NOT NULL,
+  actor_user_id INT REFERENCES users(id),
+  payload JSONB,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE suppliers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE purchase_orders DISABLE ROW LEVEL SECURITY;
+ALTER TABLE purchase_order_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE domain_events DISABLE ROW LEVEL SECURITY;
+
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier ON purchase_orders(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_status ON purchase_orders(status);
+CREATE INDEX IF NOT EXISTS idx_purchase_items_order ON purchase_order_items(purchase_order_id);
+CREATE INDEX IF NOT EXISTS idx_domain_events_entity ON domain_events(entity_type, entity_id);
+
+-- Phase 2 document and printing engine
+CREATE TABLE IF NOT EXISTS document_files (
+  id BIGSERIAL PRIMARY KEY,
+  document_type VARCHAR(80) NOT NULL,
+  filename VARCHAR(255) NOT NULL,
+  mime_type VARCHAR(120) NOT NULL,
+  byte_size BIGINT NOT NULL DEFAULT 0,
+  content_base64 TEXT NOT NULL,
+  entity_type VARCHAR(80),
+  entity_id VARCHAR(100),
+  metadata JSONB,
+  is_archived SMALLINT DEFAULT 0,
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS barcode_templates (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  barcode_type VARCHAR(30) DEFAULT 'code128',
+  label_size VARCHAR(30) DEFAULT '40x20',
+  config JSONB,
+  is_default SMALLINT DEFAULT 0,
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS barcode_history (
+  id BIGSERIAL PRIMARY KEY,
+  product_id INT REFERENCES products(id),
+  barcode_value VARCHAR(255) NOT NULL,
+  barcode_type VARCHAR(30) NOT NULL,
+  document_file_id BIGINT REFERENCES document_files(id),
+  generated_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS barcode_print_jobs (
+  id BIGSERIAL PRIMARY KEY,
+  barcode_history_id BIGINT REFERENCES barcode_history(id),
+  copies INT DEFAULT 1,
+  settings JSONB,
+  status VARCHAR(30) DEFAULT 'queued',
+  requested_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS barcode_downloads (
+  id BIGSERIAL PRIMARY KEY,
+  barcode_history_id BIGINT REFERENCES barcode_history(id),
+  format VARCHAR(20) NOT NULL,
+  downloaded_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS invoice_templates (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  template_type VARCHAR(40) DEFAULT 'classic',
+  config JSONB,
+  is_default SMALLINT DEFAULT 0,
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS invoice_documents (
+  id BIGSERIAL PRIMARY KEY,
+  invoice_id INT REFERENCES invoices(id),
+  template_id INT REFERENCES invoice_templates(id),
+  document_file_id BIGINT REFERENCES document_files(id),
+  version INT DEFAULT 1,
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS print_jobs (
+  id BIGSERIAL PRIMARY KEY,
+  document_file_id BIGINT NOT NULL REFERENCES document_files(id),
+  document_type VARCHAR(80) NOT NULL,
+  status VARCHAR(30) DEFAULT 'queued',
+  settings JSONB,
+  requested_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ocr_documents (
+  id BIGSERIAL PRIMARY KEY,
+  filename VARCHAR(255) NOT NULL,
+  mime_type VARCHAR(120) NOT NULL,
+  status VARCHAR(30) DEFAULT 'pending',
+  source_base64 TEXT NOT NULL,
+  confidence DECIMAL(5,4),
+  extracted_data JSONB,
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS label_templates (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  label_type VARCHAR(50) NOT NULL,
+  width_mm DECIMAL(8,2),
+  height_mm DECIMAL(8,2),
+  config JSONB,
+  is_default SMALLINT DEFAULT 0,
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pdf_exports (
+  id BIGSERIAL PRIMARY KEY,
+  document_file_id BIGINT REFERENCES document_files(id),
+  export_type VARCHAR(30) NOT NULL,
+  row_count INT DEFAULT 0,
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS document_settings (
+  id SERIAL PRIMARY KEY,
+  setting_scope VARCHAR(50) DEFAULT 'organization',
+  setting_key VARCHAR(100) NOT NULL,
+  setting_value JSONB,
+  updated_by INT REFERENCES users(id),
+  updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(setting_scope, setting_key)
+);
+
+ALTER TABLE document_files DISABLE ROW LEVEL SECURITY;
+ALTER TABLE barcode_templates DISABLE ROW LEVEL SECURITY;
+ALTER TABLE barcode_history DISABLE ROW LEVEL SECURITY;
+ALTER TABLE barcode_print_jobs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE barcode_downloads DISABLE ROW LEVEL SECURITY;
+ALTER TABLE invoice_templates DISABLE ROW LEVEL SECURITY;
+ALTER TABLE invoice_documents DISABLE ROW LEVEL SECURITY;
+ALTER TABLE print_jobs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE ocr_documents DISABLE ROW LEVEL SECURITY;
+ALTER TABLE label_templates DISABLE ROW LEVEL SECURITY;
+ALTER TABLE pdf_exports DISABLE ROW LEVEL SECURITY;
+ALTER TABLE document_settings DISABLE ROW LEVEL SECURITY;
+
+CREATE INDEX IF NOT EXISTS idx_documents_type_created ON document_files(document_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_documents_entity ON document_files(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_barcode_history_value ON barcode_history(barcode_value);
+CREATE INDEX IF NOT EXISTS idx_print_jobs_status ON print_jobs(status);
+
+-- Phase 3 finance and double-entry accounting engine
+CREATE TABLE IF NOT EXISTS accounts (
+  id SERIAL PRIMARY KEY,
+  code VARCHAR(40) UNIQUE NOT NULL,
+  name VARCHAR(160) NOT NULL,
+  account_type VARCHAR(20) NOT NULL CHECK (account_type IN ('asset','liability','income','expense','equity')),
+  parent_id INT REFERENCES accounts(id),
+  opening_balance DECIMAL(14,2) DEFAULT 0,
+  is_archived SMALLINT DEFAULT 0,
+  merged_into_id INT REFERENCES accounts(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS journals (
+  id BIGSERIAL PRIMARY KEY,
+  journal_no VARCHAR(80) UNIQUE NOT NULL,
+  journal_type VARCHAR(40) DEFAULT 'general',
+  journal_date DATE NOT NULL,
+  reference VARCHAR(160),
+  description TEXT,
+  total_debit DECIMAL(14,2) NOT NULL,
+  total_credit DECIMAL(14,2) NOT NULL,
+  status VARCHAR(30) DEFAULT 'posted',
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS journal_entries (
+  id BIGSERIAL PRIMARY KEY,
+  journal_id BIGINT NOT NULL REFERENCES journals(id) ON DELETE CASCADE,
+  account_id INT NOT NULL REFERENCES accounts(id),
+  debit DECIMAL(14,2) DEFAULT 0 CHECK (debit >= 0),
+  credit DECIMAL(14,2) DEFAULT 0 CHECK (credit >= 0),
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  CHECK (NOT (debit > 0 AND credit > 0))
+);
+
+CREATE TABLE IF NOT EXISTS banks (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(160) NOT NULL,
+  account_number VARCHAR(100) NOT NULL,
+  ifsc VARCHAR(30),
+  upi_id VARCHAR(120),
+  account_id INT NOT NULL REFERENCES accounts(id),
+  current_balance DECIMAL(14,2) DEFAULT 0,
+  status VARCHAR(30) DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS bank_transactions (
+  id BIGSERIAL PRIMARY KEY,
+  bank_id INT NOT NULL REFERENCES banks(id),
+  journal_id BIGINT REFERENCES journals(id),
+  direction VARCHAR(10) NOT NULL CHECK (direction IN ('in','out')),
+  amount DECIMAL(14,2) NOT NULL CHECK (amount > 0),
+  method VARCHAR(30),
+  reference VARCHAR(160),
+  description TEXT,
+  transaction_date DATE NOT NULL,
+  is_reconciled SMALLINT DEFAULT 0,
+  reconciled_at TIMESTAMPTZ,
+  reconciled_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+  id BIGSERIAL PRIMARY KEY,
+  payment_no VARCHAR(80) UNIQUE NOT NULL,
+  direction VARCHAR(10) NOT NULL CHECK (direction IN ('in','out')),
+  party_type VARCHAR(30),
+  party_id BIGINT,
+  amount DECIMAL(14,2) NOT NULL CHECK (amount > 0),
+  method VARCHAR(30),
+  reference VARCHAR(160),
+  payment_date DATE NOT NULL,
+  journal_id BIGINT REFERENCES journals(id),
+  status VARCHAR(30) DEFAULT 'completed',
+  notes TEXT,
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS payment_allocations (
+  id BIGSERIAL PRIMARY KEY,
+  payment_id BIGINT NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+  document_type VARCHAR(30) NOT NULL,
+  document_id BIGINT NOT NULL,
+  amount DECIMAL(14,2) NOT NULL CHECK (amount >= 0),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS expenses (
+  id BIGSERIAL PRIMARY KEY,
+  expense_no VARCHAR(80) UNIQUE NOT NULL,
+  supplier_id INT REFERENCES suppliers(id),
+  expense_account_id INT NOT NULL REFERENCES accounts(id),
+  payment_account_id INT REFERENCES accounts(id),
+  amount DECIMAL(14,2) NOT NULL CHECK (amount > 0),
+  tax_amount DECIMAL(14,2) DEFAULT 0,
+  expense_date DATE NOT NULL,
+  description TEXT,
+  reference VARCHAR(160),
+  status VARCHAR(30) DEFAULT 'draft',
+  journal_id BIGINT REFERENCES journals(id),
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS taxes (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  tax_type VARCHAR(30) NOT NULL,
+  rate DECIMAL(7,3) NOT NULL,
+  hsn_code VARCHAR(30),
+  is_active SMALLINT DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS gst_returns (
+  id BIGSERIAL PRIMARY KEY,
+  return_type VARCHAR(30) NOT NULL,
+  period_start DATE NOT NULL,
+  period_end DATE NOT NULL,
+  output_tax DECIMAL(14,2) DEFAULT 0,
+  input_tax DECIMAL(14,2) DEFAULT 0,
+  net_payable DECIMAL(14,2) DEFAULT 0,
+  status VARCHAR(30) DEFAULT 'draft',
+  filed_at TIMESTAMPTZ,
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS fiscal_periods (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  status VARCHAR(20) DEFAULT 'open',
+  closed_at TIMESTAMPTZ,
+  closed_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO accounts (code, name, account_type) VALUES
+  ('1000', 'Cash on Hand', 'asset'), ('1010', 'Bank Accounts', 'asset'),
+  ('1100', 'Accounts Receivable', 'asset'), ('1200', 'Inventory Asset', 'asset'),
+  ('2000', 'Accounts Payable', 'liability'), ('2100', 'GST Payable', 'liability'),
+  ('3000', 'Owner Equity', 'equity'), ('4000', 'Sales Revenue', 'income'),
+  ('5000', 'Cost of Goods Sold', 'expense'), ('5100', 'Purchases', 'expense'),
+  ('5200', 'Operating Expenses', 'expense')
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO taxes (name, tax_type, rate)
+SELECT seed.name, 'gst', seed.rate FROM (VALUES ('GST 5%',5),('GST 12%',12),('GST 18%',18),('GST 28%',28)) AS seed(name,rate)
+WHERE NOT EXISTS (SELECT 1 FROM taxes);
+
+ALTER TABLE accounts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE journals DISABLE ROW LEVEL SECURITY;
+ALTER TABLE journal_entries DISABLE ROW LEVEL SECURITY;
+ALTER TABLE banks DISABLE ROW LEVEL SECURITY;
+ALTER TABLE bank_transactions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE payments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE payment_allocations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE expenses DISABLE ROW LEVEL SECURITY;
+ALTER TABLE taxes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE gst_returns DISABLE ROW LEVEL SECURITY;
+ALTER TABLE fiscal_periods DISABLE ROW LEVEL SECURITY;
+
+CREATE INDEX IF NOT EXISTS idx_journals_date ON journals(journal_date);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_account ON journal_entries(account_id);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_journal ON journal_entries(journal_id);
+CREATE INDEX IF NOT EXISTS idx_payments_party ON payments(party_type, party_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date);
+CREATE INDEX IF NOT EXISTS idx_bank_transactions_date ON bank_transactions(transaction_date);
+
+-- Phase 4 AI Business Copilot
+CREATE TABLE IF NOT EXISTS ai_conversations (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INT NOT NULL REFERENCES users(id),
+  title VARCHAR(200) NOT NULL,
+  status VARCHAR(30) DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_messages (
+  id BIGSERIAL PRIMARY KEY,
+  conversation_id BIGINT NOT NULL REFERENCES ai_conversations(id) ON DELETE CASCADE,
+  role VARCHAR(20) NOT NULL CHECK (role IN ('user','assistant','system')),
+  content TEXT NOT NULL,
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_tool_calls (
+  id BIGSERIAL PRIMARY KEY,
+  conversation_id BIGINT NOT NULL REFERENCES ai_conversations(id) ON DELETE CASCADE,
+  message_id BIGINT REFERENCES ai_messages(id) ON DELETE SET NULL,
+  tool_name VARCHAR(100) NOT NULL,
+  arguments JSONB,
+  result_summary TEXT,
+  status VARCHAR(30) DEFAULT 'completed',
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_action_proposals (
+  id BIGSERIAL PRIMARY KEY,
+  conversation_id BIGINT REFERENCES ai_conversations(id) ON DELETE SET NULL,
+  message_id BIGINT REFERENCES ai_messages(id) ON DELETE SET NULL,
+  action_type VARCHAR(40) NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  reason TEXT,
+  payload JSONB NOT NULL,
+  status VARCHAR(30) DEFAULT 'pending',
+  proposed_by INT REFERENCES users(id),
+  approved_by INT REFERENCES users(id),
+  rejected_by INT REFERENCES users(id),
+  approved_at TIMESTAMPTZ,
+  rejected_at TIMESTAMPTZ,
+  rejection_reason TEXT,
+  execution_result JSONB,
+  execution_error TEXT,
+  last_attempt_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_insights (
+  id BIGSERIAL PRIMARY KEY,
+  insight_type VARCHAR(50) NOT NULL,
+  severity VARCHAR(30) NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  message TEXT NOT NULL,
+  evidence JSONB,
+  status VARCHAR(30) DEFAULT 'active',
+  generated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS ai_forecasts (
+  id BIGSERIAL PRIMARY KEY,
+  forecast_type VARCHAR(50) NOT NULL,
+  entity_type VARCHAR(50),
+  entity_id VARCHAR(100),
+  horizon_days INT NOT NULL,
+  forecast_data JSONB NOT NULL,
+  model VARCHAR(100) NOT NULL,
+  generated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_knowledge_documents (
+  id BIGSERIAL PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  content TEXT NOT NULL,
+  tags TEXT,
+  source_type VARCHAR(50) DEFAULT 'manual',
+  source_reference TEXT,
+  status VARCHAR(30) DEFAULT 'active',
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_usage_records (
+  id BIGSERIAL PRIMARY KEY,
+  conversation_id BIGINT REFERENCES ai_conversations(id) ON DELETE SET NULL,
+  user_id INT REFERENCES users(id),
+  provider VARCHAR(30) NOT NULL,
+  model VARCHAR(100) NOT NULL,
+  input_tokens INT DEFAULT 0,
+  output_tokens INT DEFAULT 0,
+  latency_ms INT DEFAULT 0,
+  fallback_used SMALLINT DEFAULT 0,
+  error_code VARCHAR(100),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_automations (
+  id BIGSERIAL PRIMARY KEY,
+  name VARCHAR(160) NOT NULL,
+  description TEXT,
+  trigger_type VARCHAR(80) NOT NULL,
+  trigger_config JSONB NOT NULL,
+  action_type VARCHAR(80) NOT NULL,
+  action_config JSONB NOT NULL,
+  status VARCHAR(30) DEFAULT 'active',
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE ai_conversations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_messages DISABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_tool_calls DISABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_action_proposals DISABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_insights DISABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_forecasts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_knowledge_documents DISABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_usage_records DISABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_automations DISABLE ROW LEVEL SECURITY;
+
+CREATE INDEX IF NOT EXISTS idx_ai_conversations_user ON ai_conversations(user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_messages_conversation ON ai_messages(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_actions_status ON ai_action_proposals(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_knowledge_status ON ai_knowledge_documents(status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_user ON ai_usage_records(user_id, created_at DESC);

@@ -1,6 +1,7 @@
 import express from 'express';
 import { supabase } from '../config/supabase.js';
 import { checkRole } from './auth.js';
+import { hashPassword } from '../src/utils/authToken.js';
 
 const router = express.Router();
 
@@ -22,9 +23,10 @@ router.get('/', checkRole(['admin', 'manager']), async (req, res) => {
 router.post('/', checkRole(['admin']), async (req, res) => {
   const { username, password, full_name, email, role } = req.body;
   try {
-    // In a real application, hash the password using bcrypt. 
-    // We store a mock hashed password or simple string for demo
-    const passwordHash = '$2y$10$jYDiutpajwvRPjavffXbVugffjwINhEua/lGu//OE7.iwBtW7Qwli'; // default 'admin123'
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    }
+    const passwordHash = hashPassword(password);
     
     const { data, error } = await supabase
       .from('users')

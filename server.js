@@ -10,6 +10,10 @@ import usersRoutes from './routes/users.js';
 import settingsRoutes from './routes/settings.js';
 import aiRoutes from './routes/ai.js';
 import invoiceRoutes from './src/routes/invoiceRoutes.js';
+import operationsRoutes from './routes/operations.js';
+import documentsRoutes from './routes/documents.js';
+import financeRoutes from './routes/finance.js';
+import searchRoutes from './routes/search.js';
 
 dotenv.config();
 
@@ -27,7 +31,7 @@ app.use((req, res, next) => {
 // Middleware
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-role', 'x-user-id']
 }));
 app.use(express.json());
@@ -45,6 +49,10 @@ app.use('/api/users', usersRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/pos', invoiceRoutes);
+app.use('/api/operations', operationsRoutes);
+app.use('/api', documentsRoutes);
+app.use('/api', financeRoutes);
+app.use('/api', searchRoutes);
 
 // Health Check / Welcome Endpoint
 app.get('/api/status', (req, res) => {

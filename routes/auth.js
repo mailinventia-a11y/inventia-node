@@ -1,5 +1,6 @@
 import express from 'express';
 import { supabase } from '../config/supabase.js';
+import { createToken, verifyPassword, verifyToken } from '../src/utils/authToken.js';
 
 const router = express.Router();
 
@@ -12,17 +13,15 @@ export const checkRole = (allowedRoles) => {
         return res.status(401).json({ error: 'Authorization header is missing.' });
       }
 
-      const token = authHeader.split(' ')[1];
-      // In a production system, verify the JWT token here
-      // For this implementation, we allow passing a custom header "x-user-role" for ease of testing/mocking
-      const userRole = req.headers['x-user-role'] || 'cashier'; 
-      const userId = req.headers['x-user-id'] || '1';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+      const session = verifyToken(token);
+      if (!session) return res.status(401).json({ error: 'Your session is invalid or has expired.' });
 
-      if (!allowedRoles.includes(userRole)) {
+      if (!allowedRoles.includes(session.role)) {
         return res.status(403).json({ error: 'Access Denied: Insufficient permissions.' });
       }
 
-      req.user = { id: userId, role: userRole };
+      req.user = session;
       next();
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -45,8 +44,9 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid username or password.' });
     }
 
-    // In a real application, compare bcrypt hash. For simplicity:
-    // we bypass security checks for demo/admin and return a mock session token
+    if (!user.status || !verifyPassword(password, user.password_hash, user.username)) {
+      return res.status(401).json({ error: 'Invalid username or password.' });
+    }
     res.json({
       success: true,
       user: {
@@ -55,7 +55,7 @@ router.post('/login', async (req, res) => {
         full_name: user.full_name,
         role: user.role
       },
-      token: 'mock-session-jwt-token-key'
+      token: createToken(user)
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -63,8 +63,8 @@ router.post('/login', async (req, res) => {
 });
 
 // Get Current Profile
-router.get('/profile', async (req, res) => {
-  const userId = req.headers['x-user-id'] || '1';
+router.get('/profile', checkRole(['admin', 'manager', 'cashier', 'warehouse_staff']), async (req, res) => {
+  const userId = req.user.id;
   try {
     const { data: user, error } = await supabase
       .from('users')

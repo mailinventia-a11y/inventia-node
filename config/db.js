@@ -235,6 +235,324 @@ if (isSupabaseConfigured()) {
       lineTotal REAL NOT NULL
     )`);
 
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS suppliers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL, phone TEXT, email TEXT, gstin TEXT, address TEXT,
+      payment_terms INTEGER DEFAULT 0, status INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS purchase_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_no TEXT UNIQUE NOT NULL,
+      supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+      warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+      status TEXT DEFAULT 'draft', expected_date TEXT, received_at TEXT, notes TEXT,
+      total REAL NOT NULL DEFAULT 0, created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS purchase_order_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      purchase_order_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+      product_id INTEGER NOT NULL REFERENCES products(id),
+      quantity INTEGER NOT NULL, received_quantity INTEGER DEFAULT 0,
+      unit_cost REAL NOT NULL, line_total REAL NOT NULL
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS domain_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
+      actor_user_id INTEGER REFERENCES users(id), payload TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS document_files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_type TEXT NOT NULL, filename TEXT NOT NULL, mime_type TEXT NOT NULL,
+      byte_size INTEGER NOT NULL DEFAULT 0, content_base64 TEXT NOT NULL,
+      entity_type TEXT, entity_id TEXT, metadata TEXT, is_archived INTEGER DEFAULT 0,
+      created_by INTEGER REFERENCES users(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS barcode_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL, barcode_type TEXT DEFAULT 'code128', label_size TEXT DEFAULT '40x20',
+      config TEXT, is_default INTEGER DEFAULT 0, created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS barcode_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER REFERENCES products(id), barcode_value TEXT NOT NULL,
+      barcode_type TEXT NOT NULL, document_file_id INTEGER REFERENCES document_files(id),
+      generated_by INTEGER REFERENCES users(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS barcode_print_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      barcode_history_id INTEGER REFERENCES barcode_history(id),
+      copies INTEGER DEFAULT 1, settings TEXT, status TEXT DEFAULT 'queued',
+      requested_by INTEGER REFERENCES users(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS barcode_downloads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      barcode_history_id INTEGER REFERENCES barcode_history(id),
+      format TEXT NOT NULL, downloaded_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS invoice_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL, template_type TEXT DEFAULT 'classic', config TEXT,
+      is_default INTEGER DEFAULT 0, created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS invoice_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoice_id INTEGER REFERENCES invoices(id), template_id INTEGER REFERENCES invoice_templates(id),
+      document_file_id INTEGER REFERENCES document_files(id), version INTEGER DEFAULT 1,
+      created_by INTEGER REFERENCES users(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS print_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_file_id INTEGER NOT NULL REFERENCES document_files(id),
+      document_type TEXT NOT NULL, status TEXT DEFAULT 'queued', settings TEXT,
+      requested_by INTEGER REFERENCES users(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS ocr_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      filename TEXT NOT NULL, mime_type TEXT NOT NULL, status TEXT DEFAULT 'pending',
+      source_base64 TEXT NOT NULL, confidence REAL, extracted_data TEXT,
+      created_by INTEGER REFERENCES users(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS label_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL, label_type TEXT NOT NULL, width_mm REAL, height_mm REAL,
+      config TEXT, is_default INTEGER DEFAULT 0, created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS pdf_exports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_file_id INTEGER REFERENCES document_files(id), export_type TEXT NOT NULL,
+      row_count INTEGER DEFAULT 0, created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS document_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      setting_scope TEXT DEFAULT 'organization', setting_key TEXT NOT NULL,
+      setting_value TEXT, updated_by INTEGER REFERENCES users(id),
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(setting_scope, setting_key)
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
+      account_type TEXT NOT NULL CHECK(account_type IN ('asset','liability','income','expense','equity')),
+      parent_id INTEGER REFERENCES accounts(id), opening_balance REAL DEFAULT 0,
+      is_archived INTEGER DEFAULT 0, merged_into_id INTEGER REFERENCES accounts(id),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS journals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      journal_no TEXT UNIQUE NOT NULL, journal_type TEXT DEFAULT 'general',
+      journal_date TEXT NOT NULL, reference TEXT, description TEXT,
+      total_debit REAL NOT NULL, total_credit REAL NOT NULL,
+      status TEXT DEFAULT 'posted', created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS journal_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      journal_id INTEGER NOT NULL REFERENCES journals(id) ON DELETE CASCADE,
+      account_id INTEGER NOT NULL REFERENCES accounts(id),
+      debit REAL DEFAULT 0, credit REAL DEFAULT 0, description TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS banks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL, account_number TEXT NOT NULL, ifsc TEXT, upi_id TEXT,
+      account_id INTEGER NOT NULL REFERENCES accounts(id),
+      current_balance REAL DEFAULT 0, status TEXT DEFAULT 'active',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS bank_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bank_id INTEGER NOT NULL REFERENCES banks(id), journal_id INTEGER REFERENCES journals(id),
+      direction TEXT NOT NULL, amount REAL NOT NULL, method TEXT, reference TEXT,
+      description TEXT, transaction_date TEXT NOT NULL, is_reconciled INTEGER DEFAULT 0,
+      reconciled_at TEXT, reconciled_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      payment_no TEXT UNIQUE NOT NULL, direction TEXT NOT NULL,
+      party_type TEXT, party_id INTEGER, amount REAL NOT NULL, method TEXT,
+      reference TEXT, payment_date TEXT NOT NULL, journal_id INTEGER REFERENCES journals(id),
+      status TEXT DEFAULT 'completed', notes TEXT, created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS payment_allocations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      payment_id INTEGER NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+      document_type TEXT NOT NULL, document_id INTEGER NOT NULL, amount REAL NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      expense_no TEXT UNIQUE NOT NULL, supplier_id INTEGER REFERENCES suppliers(id),
+      expense_account_id INTEGER NOT NULL REFERENCES accounts(id),
+      payment_account_id INTEGER REFERENCES accounts(id), amount REAL NOT NULL,
+      tax_amount REAL DEFAULT 0, expense_date TEXT NOT NULL, description TEXT,
+      reference TEXT, status TEXT DEFAULT 'draft', journal_id INTEGER REFERENCES journals(id),
+      created_by INTEGER REFERENCES users(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS taxes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL, tax_type TEXT NOT NULL, rate REAL NOT NULL,
+      hsn_code TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS gst_returns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      return_type TEXT NOT NULL, period_start TEXT NOT NULL, period_end TEXT NOT NULL,
+      output_tax REAL DEFAULT 0, input_tax REAL DEFAULT 0, net_payable REAL DEFAULT 0,
+      status TEXT DEFAULT 'draft', filed_at TEXT, created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS fiscal_periods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL,
+      status TEXT DEFAULT 'open', closed_at TEXT, closed_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS ai_conversations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      title TEXT NOT NULL, status TEXT DEFAULT 'active',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS ai_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id INTEGER NOT NULL REFERENCES ai_conversations(id) ON DELETE CASCADE,
+      role TEXT NOT NULL, content TEXT NOT NULL, metadata TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS ai_tool_calls (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id INTEGER NOT NULL REFERENCES ai_conversations(id) ON DELETE CASCADE,
+      message_id INTEGER REFERENCES ai_messages(id) ON DELETE SET NULL,
+      tool_name TEXT NOT NULL, arguments TEXT, result_summary TEXT,
+      status TEXT DEFAULT 'completed', created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS ai_action_proposals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id INTEGER REFERENCES ai_conversations(id) ON DELETE SET NULL,
+      message_id INTEGER REFERENCES ai_messages(id) ON DELETE SET NULL,
+      action_type TEXT NOT NULL, title TEXT NOT NULL, reason TEXT,
+      payload TEXT NOT NULL, status TEXT DEFAULT 'pending',
+      proposed_by INTEGER REFERENCES users(id), approved_by INTEGER REFERENCES users(id),
+      rejected_by INTEGER REFERENCES users(id), approved_at TEXT, rejected_at TEXT,
+      rejection_reason TEXT, execution_result TEXT, execution_error TEXT,
+      last_attempt_at TEXT, expires_at TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS ai_insights (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      insight_type TEXT NOT NULL, severity TEXT NOT NULL, title TEXT NOT NULL,
+      message TEXT NOT NULL, evidence TEXT, status TEXT DEFAULT 'active',
+      generated_at TEXT DEFAULT CURRENT_TIMESTAMP, expires_at TEXT
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS ai_forecasts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      forecast_type TEXT NOT NULL, entity_type TEXT, entity_id TEXT,
+      horizon_days INTEGER NOT NULL, forecast_data TEXT NOT NULL,
+      model TEXT NOT NULL, generated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS ai_knowledge_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL, content TEXT NOT NULL, tags TEXT,
+      source_type TEXT DEFAULT 'manual', source_reference TEXT,
+      status TEXT DEFAULT 'active', created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS ai_usage_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id INTEGER REFERENCES ai_conversations(id) ON DELETE SET NULL,
+      user_id INTEGER REFERENCES users(id), provider TEXT NOT NULL, model TEXT NOT NULL,
+      input_tokens INTEGER DEFAULT 0, output_tokens INTEGER DEFAULT 0,
+      latency_ms INTEGER DEFAULT 0, fallback_used INTEGER DEFAULT 0,
+      error_code TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS ai_automations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL, description TEXT, trigger_type TEXT NOT NULL,
+      trigger_config TEXT NOT NULL, action_type TEXT NOT NULL,
+      action_config TEXT NOT NULL, status TEXT DEFAULT 'active',
+      created_by INTEGER REFERENCES users(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    sqliteDb.get(`SELECT COUNT(*) as count FROM accounts`, (err, row) => {
+      if (row && row.count === 0) {
+        sqliteDb.run(`INSERT INTO accounts (code, name, account_type) VALUES
+          ('1000', 'Cash on Hand', 'asset'),
+          ('1010', 'Bank Accounts', 'asset'),
+          ('1100', 'Accounts Receivable', 'asset'),
+          ('1200', 'Inventory Asset', 'asset'),
+          ('2000', 'Accounts Payable', 'liability'),
+          ('2100', 'GST Payable', 'liability'),
+          ('3000', 'Owner Equity', 'equity'),
+          ('4000', 'Sales Revenue', 'income'),
+          ('5000', 'Cost of Goods Sold', 'expense'),
+          ('5100', 'Purchases', 'expense'),
+          ('5200', 'Operating Expenses', 'expense')`);
+      }
+    });
+
+    sqliteDb.get(`SELECT COUNT(*) as count FROM taxes`, (err, row) => {
+      if (row && row.count === 0) {
+        sqliteDb.run(`INSERT INTO taxes (name, tax_type, rate) VALUES
+          ('GST 5%', 'gst', 5), ('GST 12%', 'gst', 12),
+          ('GST 18%', 'gst', 18), ('GST 28%', 'gst', 28)`);
+      }
+    });
+
+    sqliteDb.get(`SELECT COUNT(*) as count FROM invoice_templates`, (err, row) => {
+      if (row && row.count === 0) {
+        sqliteDb.run(`INSERT INTO invoice_templates (name, template_type, config, is_default) VALUES
+          ('Inventia Classic', 'classic', '{"paper_size":"A4","primary_color":"#2563eb","show_qr":true}', 1),
+          ('Retail Thermal', 'thermal', '{"paper_size":"80mm","show_logo":true,"compact":true}', 0),
+          ('Modern Minimal', 'minimal', '{"paper_size":"A4","primary_color":"#111827","show_qr":true}', 0)`);
+      }
+    });
+
     // ----------------------------------------------------
     // SEED DEFAULT DATA IF TABLES ARE EMPTY
     // ----------------------------------------------------
@@ -362,7 +680,12 @@ class SQLiteBuilder {
   }
 
   select(fields = '*') {
-    this.queryType = 'select';
+    // Supabase uses select() after insert/update/delete to request the affected
+    // rows. Preserve the pending mutation instead of accidentally turning it
+    // back into a read query.
+    if (!['insert', 'update', 'upsert', 'delete'].includes(this.queryType)) {
+      this.queryType = 'select';
+    }
     this.selectFields = fields;
     return this;
   }
@@ -600,13 +923,38 @@ class SQLiteBuilder {
         }
         return { data: rows, error: null };
       } else {
+        let previousRows = [];
+        if (this.queryType === 'update' || this.queryType === 'delete') {
+          let lookupSql = `SELECT * FROM ${this.table}`;
+          const lookupParams = [];
+          if (this.wheres.length > 0) {
+            lookupSql += ` WHERE ${this.wheres.map(w => {
+              lookupParams.push(w.val);
+              return `${w.col} ${w.op} ?`;
+            }).join(' AND ')}`;
+          }
+          previousRows = await sqliteDb.allAsync(lookupSql, lookupParams);
+        }
         const result = await sqliteDb.runAsync(sql, params);
         // Map lastID to select results if needed
         if (this.queryType === 'insert' || this.queryType === 'upsert') {
           // Fetch inserted row
-          const insertedRow = await sqliteDb.getAsync(`SELECT * FROM ${this.table} WHERE id = ?`, [result.id]);
+          const insertedRow = await sqliteDb.getAsync(`SELECT * FROM ${this.table} WHERE rowid = ?`, [result.id]);
           return { data: [insertedRow], error: null };
         }
+        if (this.queryType === 'update') {
+          if (!result.changes) return { data: [], error: null };
+          const ids = previousRows.map(row => row.id).filter(id => id != null);
+          if (ids.length) {
+            const updatedRows = [];
+            for (const id of ids) {
+              const row = await sqliteDb.getAsync(`SELECT * FROM ${this.table} WHERE id = ?`, [id]);
+              if (row) updatedRows.push(row);
+            }
+            return { data: updatedRows, error: null };
+          }
+        }
+        if (this.queryType === 'delete') return { data: previousRows, error: null };
         return { data: [{ id: result.id, changes: result.changes }], error: null };
       }
     } catch (err) {

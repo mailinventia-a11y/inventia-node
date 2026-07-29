@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Inventia - Workspace Business Operating System</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,8 +13,6 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- Razorpay Checkout SDK -->
-  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <!-- Stylesheets -->
   <link rel="stylesheet" href="style.css">
 </head>
@@ -173,7 +172,7 @@
             <i class="fa-solid fa-bolt"></i>
           </div>
           <span class="header-brand-title">Inventia</span>
-          <span class="header-badge-pill">POS</span>
+          <span class="header-badge-pill">OS</span>
         </div>
 
         <!-- + Create Direct-Create Menu Dropdown -->
@@ -213,8 +212,9 @@
         <!-- AI Search Input Bar -->
         <div class="header-ai-search-box">
           <i class="fa-solid fa-sparkles ai-icon"></i>
-          <input type="text" id="globalAISearchInput" placeholder="AI Search products, invoices, customers... (Ctrl+K)" onkeydown="handleGlobalAISearch(event)">
+          <input type="text" id="globalAISearchInput" autocomplete="off" placeholder="Search business or ask AI... (Ctrl+K)" oninput="handleUniversalSearchInput(event)" onkeydown="handleGlobalAISearch(event)">
           <span class="kbd-shortcut">Ctrl K</span>
+          <div id="universalSearchResults" class="universal-search-results" role="listbox" aria-label="Universal search results"></div>
         </div>
       </div>
 
@@ -223,6 +223,14 @@
         <button class="header-tool-btn" onclick="toggleCalculatorModal()" title="Area Calculator">
           <i class="fa-solid fa-calculator"></i>
           <span class="tool-label">Calculator</span>
+        </button>
+
+        <button class="header-icon-btn topbar-theme-btn" onclick="toggleThemeMode()" title="Toggle Theme">
+          <i class="fa-solid fa-moon" id="topThemeToggleIcon"></i>
+        </button>
+
+        <button class="header-icon-btn topbar-help-btn" onclick="openHelpSupportModal()" title="Help &amp; Support">
+          <i class="fa-solid fa-circle-question"></i>
         </button>
 
         <!-- 🔔 Notifications Feed Dropdown -->
@@ -431,7 +439,7 @@
           <div class="panel-header">
             <h4><i class="fa-solid fa-circle-info" style="color: var(--primary);"></i> Overall Information</h4>
           </div>
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 15px;">
+          <div class="dashboard-overview-stats" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 15px;">
             <div class="stat-mini-card">
               <i class="fa-solid fa-users" style="color:#6366f1; background:#eef2ff; padding:8px; border-radius:8px; margin-bottom:6px;"></i>
               <span style="display:block; font-size:0.75rem; color:var(--text-muted);">Customers</span>
@@ -503,8 +511,8 @@
               </thead>
               <tbody id="bestSellingTable">
                 <tr>
-                  <td style="display:flex; align-items:center; gap:10px;">
-                    <img src="https://images.unsplash.com/photo-1617576683096-00fc8eecb3af?w=100" style="width:36px; height:36px; border-radius:6px; object-fit:cover;">
+                  <td class="table-product-cell">
+                    <span class="table-product-chip">GT</span>
                     <strong>Gardening Tools Set</strong>
                   </td>
                   <td>$59.99</td>
@@ -512,8 +520,8 @@
                   <td><span class="badge-growth">↑ 100%</span></td>
                 </tr>
                 <tr>
-                  <td style="display:flex; align-items:center; gap:10px;">
-                    <img src="https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=100" style="width:36px; height:36px; border-radius:6px; object-fit:cover;">
+                  <td class="table-product-cell">
+                    <span class="table-product-chip">CB</span>
                     <strong>Coffee Beans</strong>
                   </td>
                   <td>$12.99</td>
@@ -542,8 +550,8 @@
               </thead>
               <tbody id="lowStockTable">
                 <tr>
-                  <td style="display:flex; align-items:center; gap:10px;">
-                    <img src="https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=100" style="width:36px; height:36px; border-radius:6px; object-fit:cover;">
+                  <td class="table-product-cell">
+                    <span class="table-product-chip">CB</span>
                     <strong>Coffee Beans</strong>
                   </td>
                   <td>#6</td>
@@ -561,12 +569,48 @@
         <div class="panel-header">
           <h4><i class="fa-solid fa-bolt" style="color:#eab308;"></i> Quick Actions</h4>
         </div>
-        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 12px;">
-          <button class="action-btn primary" onclick="switchTab('pos')" style="padding:14px; font-weight:700;"><i class="fa-solid fa-plus"></i> New Sale</button>
-          <button class="action-btn secondary" onclick="switchTab('inventory')" style="padding:14px; font-weight:700; background-color:#1e293b; color:white;"><i class="fa-solid fa-boxes-stacked"></i> Manage Products</button>
-          <button class="action-btn secondary" onclick="switchTab('customers')" style="padding:14px; font-weight:700; background-color:#7c3aed; color:white;"><i class="fa-solid fa-users"></i> Manage Customers</button>
-          <button class="action-btn secondary" onclick="switchTab('transfers')" style="padding:14px; font-weight:700; background-color:#d97706; color:white;"><i class="fa-solid fa-warehouse"></i> Check Inventory</button>
-          <button class="action-btn secondary" onclick="switchTab('reports')" style="padding:14px; font-weight:700; background-color:#0284c7; color:white;"><i class="fa-solid fa-chart-pie"></i> View Reports</button>
+        <div class="quick-action-grid">
+          <button class="action-btn quick-action-tile tone-primary" onclick="switchTab('pos')"><i class="fa-solid fa-plus"></i> New Sale</button>
+          <button class="action-btn quick-action-tile tone-slate" onclick="switchTab('inventory')"><i class="fa-solid fa-boxes-stacked"></i> Manage Products</button>
+          <button class="action-btn quick-action-tile tone-violet" onclick="switchTab('customers')"><i class="fa-solid fa-users"></i> Manage Customers</button>
+          <button class="action-btn quick-action-tile tone-amber" onclick="switchTab('transfers')"><i class="fa-solid fa-warehouse"></i> Check Inventory</button>
+          <button class="action-btn quick-action-tile tone-cyan" onclick="switchTab('reports')"><i class="fa-solid fa-chart-pie"></i> View Reports</button>
+        </div>
+      </div>
+
+      <div class="split-grid dashboard-ai-grid">
+        <div class="grid-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Live operating signal</p>
+              <h4><i class="fa-solid fa-heart-pulse"></i> Business Health</h4>
+            </div>
+            <button class="action-btn secondary compact" onclick="switchTab('automation')">Open AI workspace</button>
+          </div>
+          <div class="business-health-layout">
+            <div class="business-health-score">
+              <strong id="dashboardHealthScore">--</strong>
+              <span id="dashboardHealthLabel">Calculating</span>
+            </div>
+            <div id="dashboardHealthMetrics" class="business-health-metrics">
+              <div><span>Revenue trend</span><strong>--</strong></div>
+              <div><span>Inventory health</span><strong>--</strong></div>
+              <div><span>Receivables</span><strong>--</strong></div>
+              <div><span>Cash position</span><strong>--</strong></div>
+            </div>
+          </div>
+        </div>
+        <div class="grid-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Audited business intelligence</p>
+              <h4><i class="fa-solid fa-sparkles"></i> AI Summary &amp; Alerts</h4>
+            </div>
+            <span id="dashboardAiProvider" class="status-badge pending">Loading</span>
+          </div>
+          <div id="dashboardAiInsights" class="ai-insight-list">
+            <div class="ai-insight-item"><i class="fa-solid fa-spinner fa-spin"></i><div><strong>Analyzing your business</strong><span>Inventory, sales, finance, and outstanding balances are being checked.</span></div></div>
+          </div>
         </div>
       </div>
 
@@ -1221,37 +1265,37 @@
 
       <div id="settingsAiForm" class="settings-managed-content">
       <div class="grid-panel settings-form-card" style="margin-top: 24px; padding: 20px;">
-        <h4>AI Agent API Configuration</h4>
+        <h4>Business Copilot Configuration</h4>
         <form id="aiSettingsForm" class="panel-form" onsubmit="submitAiSettings(event)" style="margin-top: 20px;">
           <div class="form-row">
             <div class="form-group">
-              <label>AI Provider API Endpoint</label>
-              <input type="text" id="setAiEndpoint" value="/api/ai/chat" required>
+              <label>AI Provider</label>
+              <input type="text" id="setAiProvider" value="OpenAI Responses API" readonly>
             </div>
             <div class="form-group">
-              <label>API Key / Bearer Token</label>
-              <input type="password" id="setAiApiKey" placeholder="••••••••••••••••" value="mock-api-key-1234">
+              <label>Server Connection</label>
+              <input type="text" id="setAiConnectionStatus" value="Checking secure server configuration..." readonly>
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
               <label>AI Model</label>
-              <select id="setAiModel">
-                <option value="gemini-1.5-flash">Gemini 1.5 Flash (Fast, Recommended)</option>
-                <option value="gemini-1.5-pro">Gemini 1.5 Pro (Analytical)</option>
-                <option value="local-nlp">Local POS NLP Model (Default Fallback)</option>
+              <select id="setAiModel" disabled>
+                <option value="gpt-5.6-terra">gpt-5.6-terra (Business Copilot)</option>
+                <option value="gpt-5.6-sol">gpt-5.6-sol (Advanced reasoning)</option>
+                <option value="local">Deterministic local fallback</option>
               </select>
             </div>
             <div class="form-group">
-              <label>Temperature (Creativity)</label>
-              <input type="number" id="setAiTemp" step="0.1" min="0" max="1" value="0.2">
+              <label>Data Retention</label>
+              <input type="text" value="OpenAI store: false · Local audit: enabled" readonly>
             </div>
           </div>
           <div class="form-group">
-            <label>AI Agent System Prompt Instructions</label>
-            <textarea id="setAiSystemPrompt" rows="3" style="width:100%; padding:10px; border:1px solid var(--border); border-radius:var(--radius-sm); font-family:var(--font); font-size:0.85rem; outline:none; box-sizing:border-box;">You are the Inventia POS Assistant. You have real-time access to database inventory products, quantities, prices, categories, and warehouses. Help the user check stock level, look up prices, search products by material/finish, and calculate project needs.</textarea>
+            <label>Security &amp; approval policy</label>
+            <textarea rows="3" readonly>The server grounds answers in live Inventia records. Purchase orders, invoices, transfers, payments, and automations are created as proposals and only execute after an authorized user previews and approves them.</textarea>
           </div>
-          <button type="submit" class="submit-form-btn" style="background-color: var(--violet-600);">Save AI Agent Integration</button>
+          <button type="submit" class="submit-form-btn">Verify Copilot Connection</button>
         </form>
       </div>
       </div>
@@ -1563,15 +1607,49 @@
       <div class="workspace-page-hero">
         <div class="workspace-page-icon green"><i class="fa-solid fa-wallet"></i></div>
         <div><p class="eyebrow">Finance workspace</p><h2>Finance</h2><p>Bring invoicing, tax, payments, banks, and cash flow together without leaving the workspace.</p></div>
-        <button class="action-btn primary" onclick="switchTab('sales-page')"><i class="fa-solid fa-file-invoice"></i> View invoices</button>
+        <div class="panel-actions">
+          <button class="action-btn secondary" onclick="createFinanceAccount()"><i class="fa-solid fa-folder-plus"></i> Add account</button>
+          <button class="action-btn primary" onclick="openFinanceJournalModal()"><i class="fa-solid fa-plus"></i> New journal</button>
+        </div>
       </div>
-      <div class="workspace-feature-grid four-col">
-        <button class="workspace-feature-card" onclick="switchTab('sales-page')"><i class="fa-solid fa-file-invoice"></i><strong>Invoices</strong><span>Issue and track customer invoices.</span></button>
-        <button class="workspace-feature-card" onclick="openSettingsSection('finance')"><i class="fa-solid fa-receipt"></i><strong>Tax &amp; GST</strong><span>Set taxation and reporting defaults.</span></button>
-        <button class="workspace-feature-card" onclick="openSettingsSection('finance')"><i class="fa-solid fa-building-columns"></i><strong>Bank Accounts</strong><span>Connect accounts and reconcile activity.</span></button>
-        <button class="workspace-feature-card" onclick="switchTab('reports')"><i class="fa-solid fa-chart-line"></i><strong>Cash Flow</strong><span>Understand income and expenditure trends.</span></button>
+      <div class="kpi-grid" style="margin-bottom: 20px;">
+        <div class="kpi-card"><div class="kpi-icon blue"><i class="fa-solid fa-arrow-trend-up"></i></div><div><span>Total income</span><h3 id="financeIncome">—</h3></div></div>
+        <div class="kpi-card"><div class="kpi-icon amber"><i class="fa-solid fa-receipt"></i></div><div><span>Total expenses</span><h3 id="financeExpenses">—</h3></div></div>
+        <div class="kpi-card"><div class="kpi-icon green"><i class="fa-solid fa-chart-line"></i></div><div><span>Net profit</span><h3 id="financeProfit">—</h3></div></div>
+        <div class="kpi-card"><div class="kpi-icon violet"><i class="fa-solid fa-hand-holding-dollar"></i></div><div><span>Receivables</span><h3 id="financeReceivable">—</h3></div></div>
+      </div>
+      <div class="dashboard-grid two-col">
+        <div class="grid-panel">
+          <div class="panel-title-row"><div><h3>Chart of Accounts</h3><p>Assets, liabilities, income, expenses, and equity</p></div><button class="action-btn secondary" onclick="loadFinanceWorkspace()"><i class="fa-solid fa-rotate"></i></button></div>
+          <div class="table-container"><table><thead><tr><th>Code</th><th>Account</th><th>Type</th><th>Opening</th></tr></thead><tbody id="financeAccountsTable"><tr><td colspan="4">Loading accounts…</td></tr></tbody></table></div>
+        </div>
+        <div class="grid-panel">
+          <div class="panel-title-row"><div><h3>Journal Activity</h3><p>Latest posted double-entry transactions</p></div><button class="action-btn secondary" onclick="switchTab('sales-page')">Invoices</button></div>
+          <div class="table-container"><table><thead><tr><th>Number</th><th>Date</th><th>Type</th><th>Amount</th></tr></thead><tbody id="financeJournalsTable"><tr><td colspan="4">Loading journals…</td></tr></tbody></table></div>
+        </div>
       </div>
     </section>
+
+    <div class="modal-overlay" id="financeJournalModal">
+      <div class="modal-card" style="max-width: 560px;">
+        <div class="modal-header"><h3>Post Journal Entry</h3><i class="fa-solid fa-xmark close-modal" onclick="closeFinanceJournalModal()"></i></div>
+        <div class="modal-body">
+          <form id="financeJournalForm" onsubmit="submitFinanceJournal(event)">
+            <div class="form-row">
+              <div class="form-group"><label>Date</label><input id="financeJournalDate" type="date" required></div>
+              <div class="form-group"><label>Reference</label><input id="financeJournalReference" placeholder="Optional reference"></div>
+            </div>
+            <div class="form-group"><label>Description</label><input id="financeJournalDescription" required placeholder="What is this entry for?"></div>
+            <div class="form-row">
+              <div class="form-group"><label>Debit account</label><select id="financeDebitAccount" required></select></div>
+              <div class="form-group"><label>Credit account</label><select id="financeCreditAccount" required></select></div>
+            </div>
+            <div class="form-group"><label>Amount</label><input id="financeJournalAmount" type="number" min="0.01" step="0.01" required></div>
+            <button class="submit-form-btn" type="submit">Post balanced journal</button>
+          </form>
+        </div>
+      </div>
+    </div>
 
     <!-- WORKSPACE: CRM -->
     <section id="crm" class="tab-panel workspace-page">
@@ -1587,14 +1665,73 @@
       </div>
     </section>
 
-    <!-- WORKSPACE: Automation -->
+    <!-- WORKSPACE: AI Business Copilot -->
     <section id="automation" class="tab-panel workspace-page">
       <div class="workspace-page-hero">
         <div class="workspace-page-icon blue"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
-        <div><p class="eyebrow">Intelligent workspace</p><h2>Automation</h2><p>Design rules that keep your business moving while your team focuses on customers.</p></div>
-        <button class="action-btn primary" onclick="openSettingsSection('ai')"><i class="fa-solid fa-plus"></i> Create automation</button>
+        <div><p class="eyebrow">Intelligent workspace</p><h2>AI Business Copilot</h2><p>Grounded answers, forecasts, recommendations, and approval-gated business actions.</p></div>
+        <div class="panel-actions">
+          <span id="aiWorkspaceProvider" class="status-badge pending">Checking provider</span>
+          <button class="action-btn primary" onclick="toggleAiChatDrawer(true)"><i class="fa-solid fa-comments"></i> Ask Copilot</button>
+        </div>
       </div>
-      <div class="workspace-empty-state"><i class="fa-solid fa-robot"></i><h3>Start with a business moment</h3><p>Automate low stock alerts, payment reminders, approvals, and follow-up tasks using settings built for your workspace.</p><button class="action-btn secondary" onclick="openSettingsSection('ai')">Manage AI &amp; automation rules</button></div>
+
+      <div class="kpi-grid ai-kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-icon blue"><i class="fa-solid fa-heart-pulse"></i></div>
+          <div><span>Business Health</span><strong id="aiHealthScore">--</strong><small id="aiHealthStatus">Calculating</small></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon green"><i class="fa-solid fa-chart-line"></i></div>
+          <div><span>30-day Revenue</span><strong id="aiRevenue30d">--</strong><small>Grounded in completed sales</small></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon amber"><i class="fa-solid fa-boxes-stacked"></i></div>
+          <div><span>Reorder Items</span><strong id="aiReorderCount">--</strong><small>Forecast + safety stock</small></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon violet"><i class="fa-solid fa-user-check"></i></div>
+          <div><span>Pending Approvals</span><strong id="aiPendingActions">--</strong><small>Human approval required</small></div>
+        </div>
+      </div>
+
+      <div class="split-grid ai-workspace-grid">
+        <div class="grid-panel">
+          <div class="panel-header">
+            <div><p class="eyebrow">Inventory AI</p><h4>30-day Forecast &amp; Reorder Recommendations</h4></div>
+            <button class="action-btn secondary compact" onclick="askSuggestedQuestion('Draft purchase orders for the urgent reorder recommendations')">Draft purchase order</button>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Product</th><th>On hand</th><th>30-day demand</th><th>Reorder</th><th>Risk</th></tr></thead>
+              <tbody id="aiForecastTable"><tr><td colspan="5">Loading forecast...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="grid-panel">
+          <div class="panel-header"><div><p class="eyebrow">Sales &amp; Finance AI</p><h4>Insights and Alerts</h4></div></div>
+          <div id="aiWorkspaceInsights" class="ai-insight-list"><div class="ai-insight-item"><i class="fa-solid fa-spinner fa-spin"></i><div><strong>Analyzing</strong><span>Loading grounded business insights.</span></div></div></div>
+        </div>
+      </div>
+
+      <div class="split-grid ai-workspace-grid">
+        <div class="grid-panel">
+          <div class="panel-header"><div><p class="eyebrow">Preview then approve</p><h4>Automation &amp; Action Proposals</h4></div><button class="action-btn secondary compact" onclick="loadAiWorkspace()">Refresh</button></div>
+          <div id="aiActionProposalList" class="ai-proposal-list"><div class="workspace-empty-state compact"><i class="fa-solid fa-clipboard-check"></i><p>No pending proposals.</p></div></div>
+        </div>
+        <div class="grid-panel">
+          <div class="panel-header"><div><p class="eyebrow">Grounding library</p><h4>Knowledge Base</h4></div></div>
+          <form class="ai-knowledge-form" onsubmit="submitAiKnowledge(event)">
+            <div class="form-row">
+              <div class="form-group"><label>Title</label><input id="aiKnowledgeTitle" required placeholder="Returns policy"></div>
+              <div class="form-group"><label>Tags</label><input id="aiKnowledgeTags" placeholder="policy, returns"></div>
+            </div>
+            <div class="form-group"><label>Content</label><textarea id="aiKnowledgeContent" rows="3" required placeholder="Add trusted operating knowledge for grounded AI answers."></textarea></div>
+            <button class="action-btn primary" type="submit"><i class="fa-solid fa-plus"></i> Add knowledge</button>
+          </form>
+          <div id="aiKnowledgeList" class="ai-knowledge-list"></div>
+        </div>
+      </div>
     </section>
 
     <!-- WORKSPACE: Marketplace -->
@@ -2043,12 +2180,13 @@
       <div class="modal-body" style="text-align: center; padding: 30px;">
         <h4 id="barcodeProductTitle" style="margin-bottom: 10px;">Product Name</h4>
         <div style="background-color: white; padding: 15px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: inline-block;">
-          <svg id="barcodeImage"></svg>
+          <img id="barcodeImage" alt="Generated product barcode" style="max-width: 100%; min-height: 70px;">
         </div>
       </div>
       <div class="modal-footer">
         <button class="modal-btn secondary" onclick="closeBarcodeModal()">Close</button>
-        <button class="modal-btn primary" onclick="window.print()"><i class="fa-solid fa-print"></i> Print Label</button>
+        <button class="modal-btn secondary" onclick="downloadCurrentBarcode()"><i class="fa-solid fa-download"></i> Download</button>
+        <button class="modal-btn primary" onclick="printCurrentBarcode()"><i class="fa-solid fa-print"></i> Print Label</button>
       </div>
     </div>
   </div>
@@ -2228,14 +2366,14 @@
   </div>
 
   <!-- AI Chat Drawer -->
-  <div id="aiChatDrawer" style="position:fixed; top:0; right:-380px; width:380px; height:100vh; background:var(--bg-card); border-left:1px solid var(--border); box-shadow:var(--shadow-xl); z-index:290; display:flex; flex-direction:column; transition:all 0.3s ease;">
+  <div id="aiChatDrawer" class="ai-chat-drawer" aria-label="Inventia Business Copilot">
     <!-- Chat Header -->
     <div style="padding:16px 20px; background:linear-gradient(135deg, var(--violet-600), var(--blue-600)); color:white; display:flex; justify-content:space-between; align-items:center;">
       <div style="display:flex; align-items:center; gap:10px;">
         <i class="fa-solid fa-robot" style="font-size:1.25rem;"></i>
         <div>
-          <h4 style="font-weight:750; font-size:0.95rem; margin:0;">Inventia AI Agent</h4>
-          <span style="font-size:0.7rem; opacity:0.8; display:flex; align-items:center; gap:4px;"><span style="width:6px; height:6px; background:#10b981; border-radius:50%; display:inline-block;"></span> Active POS Helper</span>
+          <h4 style="font-weight:750; font-size:0.95rem; margin:0;">Inventia Business Copilot</h4>
+          <span id="aiDrawerProvider" class="ai-drawer-provider">Checking provider...</span>
         </div>
       </div>
       <i class="fa-solid fa-xmark" onclick="toggleAiChatDrawer()" style="cursor:pointer; font-size:1.1rem; opacity:0.8; transition:opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.8"></i>
@@ -2245,14 +2383,20 @@
     <div id="aiChatMessages" style="flex:1; padding:20px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
       <!-- Welcome Message -->
       <div class="chat-msg agent" style="max-width:85%; background:var(--bg); padding:12px 14px; border-radius:12px 12px 12px 2px; align-self:flex-start; font-size:0.82rem; line-height:1.45; color:var(--ink-secondary);">
-        Hi there! I am your AI assistant. I can query our live stock, prices, materials, and locations. Ask me anything about our products!
+        I’m grounded in your live inventory, sales, finance, customer, supplier, payment, and warehouse records. I can explain the business and draft actions for your approval.
       </div>
+    </div>
+
+    <div class="ai-suggestion-row" aria-label="Suggested prompts">
+      <button type="button" onclick="askSuggestedQuestion('Summarize business health and urgent alerts')">Business health</button>
+      <button type="button" onclick="askSuggestedQuestion('What should I reorder for the next 30 days?')">Reorder plan</button>
+      <button type="button" onclick="askSuggestedQuestion('Show outstanding customer balances')">Receivables</button>
     </div>
     
     <!-- Chat Input Form -->
     <form id="aiChatForm" onsubmit="sendAiMessage(event)" style="padding:16px; border-top:1px solid var(--border); background:var(--bg-card); display:flex; gap:8px;">
-      <input type="text" id="aiChatInput" placeholder="Ask about stock, price, materials..." required style="flex:1; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.82rem; font-family:var(--font); outline:none; transition:border-color var(--transition);" onfocus="this.style.borderColor='var(--violet-600)'" onblur="this.style.borderColor='var(--border)'">
-      <button type="submit" style="width:36px; height:36px; background:var(--violet-600); border:none; border-radius:var(--radius-sm); color:white; cursor:pointer; display:grid; place-items:center; transition:background-color var(--transition);" onmouseover="this.style.backgroundColor='var(--blue-600)'" onmouseout="this.style.backgroundColor='var(--violet-600)'">
+      <input type="text" id="aiChatInput" placeholder="Ask or draft an action..." required>
+      <button type="submit" class="ai-chat-send" aria-label="Send message">
         <i class="fa-solid fa-paper-plane" style="font-size:0.85rem;"></i>
       </button>
     </form>
