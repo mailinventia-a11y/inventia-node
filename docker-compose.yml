@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: inventia
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inventia-local-password}
+      POSTGRES_DB: inventia_control
+    volumes:
+      - inventia-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventia -d inventia_control"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - inventia-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      CONTROL_DATABASE_URL: postgres://inventia:${POSTGRES_PASSWORD:-inventia-local-password}@postgres:5432/inventia_control
+      TENANT_DATABASE_ADMIN_URL: postgres://inventia:${POSTGRES_PASSWORD:-inventia-local-password}@postgres:5432/postgres
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      TENANT_MASTER_KEY: ${TENANT_MASTER_KEY:?Set TENANT_MASTER_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6-terra}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-}
+    volumes:
+      - inventia-uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: ["node", "src/workers/phase5Worker.js"]
+    environment:
+      NODE_ENV: production
+      CONTROL_DATABASE_URL: postgres://inventia:${POSTGRES_PASSWORD:-inventia-local-password}@postgres:5432/inventia_control
+      TENANT_DATABASE_ADMIN_URL: postgres://inventia:${POSTGRES_PASSWORD:-inventia-local-password}@postgres:5432/postgres
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      TENANT_MASTER_KEY: ${TENANT_MASTER_KEY:?Set TENANT_MASTER_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  inventia-postgres:
+  inventia-redis:
+  inventia-uploads:

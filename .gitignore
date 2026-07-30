@@ -65,6 +65,10 @@ out/
 # SQLite databases
 *.db
 *.sqlite
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
 
 # Environment variables
 .env
@@ -79,3 +83,8 @@ out/
 .DS_Store
 Thumbs.db
 .codex-browser/
+data/
+uploads/tenant-files/
+uploads/invoices/
+tmp/
+test-results/

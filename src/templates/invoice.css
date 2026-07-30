@@ -16,13 +16,18 @@
   padding: 0;
 }
 
+@page {
+  size: A4;
+  margin: 10mm;
+}
+
 body {
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   font-size: 10pt;
   line-height: 1.4;
   color: var(--text-dark);
   background: #fff;
-  padding: 10mm;
+  padding: 0 0 9mm;
 }
 
 .invoice-container {
@@ -114,24 +119,26 @@ body {
   border-collapse: collapse;
   margin-bottom: 6mm;
   page-break-inside: auto;
+  table-layout: fixed;
 }
 
 .items-table th {
   background-color: var(--primary-color);
   color: white;
-  font-size: 8pt;
+  font-size: 6.6pt;
   font-weight: bold;
   text-transform: uppercase;
-  padding: 2mm;
+  padding: 1.1mm 0.4mm;
   border: 1px solid var(--primary-color);
   text-align: center;
 }
 
 .items-table td {
-  padding: 2mm;
+  padding: 1.25mm 0.7mm;
   border: 1px solid var(--border-color);
-  font-size: 8pt;
+  font-size: 6.8pt;
   vertical-align: middle;
+  overflow-wrap: anywhere;
 }
 
 .items-table tr {
@@ -250,6 +257,7 @@ body {
   width: 100%;
   border-collapse: collapse;
   margin-top: 10mm;
+  margin-bottom: 12mm;
 }
 
 .signature-table td {
@@ -270,6 +278,56 @@ body {
 .signature-label {
   font-weight: bold;
   color: var(--primary-color);
+}
+
+.payment-section {
+  page-break-inside: avoid;
+  margin: 2mm 0 5mm;
+}
+
+.payment-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.payment-table th,
+.payment-table td {
+  border: 1px solid var(--border-color);
+  padding: 1.5mm 2mm;
+  font-size: 7.5pt;
+}
+
+.payment-table th {
+  background: var(--bg-light);
+  color: var(--primary-color);
+  text-align: left;
+}
+
+.payment-table th:last-child,
+.payment-table td:last-child {
+  text-align: right;
+}
+
+.payment-table tfoot td {
+  font-weight: 700;
+}
+
+.payment-outstanding td {
+  color: var(--secondary-color);
+  border-top-width: 1.5px;
+}
+
+.print-footer {
+  position: fixed;
+  left: 10mm;
+  right: 10mm;
+  bottom: 0;
+  border-top: 1px solid var(--border-color);
+  padding-top: 1.5mm;
+  color: var(--text-muted);
+  font-size: 6.5pt;
+  text-align: center;
 }
 
 /* Print Page Settings */

@@ -29,6 +29,7 @@
           <strong>Original for Recipient</strong><br>
           <strong>Invoice No:</strong> {{invoiceNumber}}<br>
           <strong>Date:</strong> {{invoiceDate}}<br>
+          <strong>Due Date:</strong> {{dueDate}}<br>
           <strong>Payment Mode:</strong> {{paymentMode}}<br>
           <strong>State:</strong> {{companyState}} (Code: {{companyStateCode}})
         </div>
@@ -62,19 +63,19 @@
   <table class="items-table">
     <thead>
       <tr>
-        <th style="width: 5%;">Sr.</th>
-        <th style="width: 30%;">Product / Service Description</th>
-        <th style="width: 10%;">HSN/SAC</th>
-        <th style="width: 8%;">Qty</th>
-        <th style="width: 6%;">Unit</th>
-        <th style="width: 10%;">Rate</th>
-        <th style="width: 8%;">Disc %</th>
-        <th style="width: 10%;">Taxable Value</th>
-        <th style="width: 6%;">GST %</th>
-        <th style="width: 8%;">CGST</th>
-        <th style="width: 8%;">SGST</th>
-        <th style="width: 8%;">IGST</th>
-        <th style="width: 12%;">Total</th>
+        <th style="width: 3%;">Sr.</th>
+        <th style="width: 24%;">Product / Service Description</th>
+        <th style="width: 7%;">HSN/SAC</th>
+        <th style="width: 5%;">Qty</th>
+        <th style="width: 5%;">Unit</th>
+        <th style="width: 8%;">Rate</th>
+        <th style="width: 6%;">Disc.</th>
+        <th style="width: 8%;">Taxable</th>
+        <th style="width: 5%;">GST %</th>
+        <th style="width: 7%;">CGST</th>
+        <th style="width: 7%;">SGST</th>
+        <th style="width: 7%;">IGST</th>
+        <th style="width: 8%;">Total</th>
       </tr>
     </thead>
     <tbody>
@@ -145,6 +146,31 @@
     </tr>
   </table>
 
+  <section class="payment-section">
+    <div class="details-card-title">Payment Breakdown</div>
+    <table class="payment-table">
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Reference</th>
+          <th>Status</th>
+          <th>Amount</th>
+        </tr>
+      </thead>
+      <tbody>{{PAYMENT_ROWS}}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3">Net Received</td>
+          <td class="text-right">{{receivedAmount}}</td>
+        </tr>
+        <tr class="payment-outstanding">
+          <td colspan="3">Outstanding</td>
+          <td class="text-right">{{outstandingAmount}}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </section>
+
   <!-- 9. Signatures Block -->
   <table class="signature-table">
     <tr>
@@ -160,6 +186,9 @@
     </tr>
   </table>
 </div>
+<footer class="print-footer">
+  Computer-generated GST invoice · {{invoiceNumber}}
+</footer>
 
 </body>
 </html>

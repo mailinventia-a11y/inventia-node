@@ -1,55 +1,61 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import puppeteer from 'puppeteer';
-import fs from 'fs';
-import path from 'path';
 
-/**
- * Generate A4 PDF from HTML using Puppeteer
- * @param {string} htmlContent - Full compiled HTML string
- * @param {string} outputPath - Local filesystem path where PDF should be saved
- */
-export const generatePDF = async (htmlContent, outputPath) => {
-  const dir = path.dirname(outputPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+const DEFAULT_TIMEOUT_MS = Number(process.env.INVOICE_PDF_TIMEOUT_MS || 30000);
 
-  // Launch Puppeteer headless browser
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      '--no-sandbox', 
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu'
-    ]
-  });
+export async function generatePDFBuffer(htmlContent, options = {}) {
+  const timeoutMs = Number(options.timeoutMs || DEFAULT_TIMEOUT_MS);
+  let browser;
+  const work = (async () => {
+    try {
+      browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu'
+        ]
+      });
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1200, height: 1600, deviceScaleFactor: 2 });
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: timeoutMs });
+      await page.emulateMediaType('print');
+      const bytes = await page.pdf({
+        format: 'A4',
+        margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' },
+        printBackground: true,
+        preferCSSPageSize: true,
+        displayHeaderFooter: false,
+        timeout: timeoutMs
+      });
+      return Buffer.from(bytes);
+    } finally {
+      await browser?.close().catch(() => {});
+    }
+  })();
 
+  let timer;
   try {
-    const page = await browser.newPage();
-    
-    // Set viewport for high resolution print render
-    await page.setViewport({ width: 1200, height: 1600, deviceScaleFactor: 2 });
-    
-    // Inject and compile the HTML content
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-
-    // Render A4 PDF with 10mm margins
-    await page.pdf({
-      path: outputPath,
-      format: 'A4',
-      margin: {
-        top: '10mm',
-        bottom: '10mm',
-        left: '10mm',
-        right: '10mm'
-      },
-      printBackground: true,
-      preferCSSPageSize: true
-    });
-  } catch (err) {
-    console.error('PDF Generation Service Error:', err);
-    throw err;
+    return await Promise.race([
+      work,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error(`Invoice PDF generation exceeded ${timeoutMs}ms.`);
+          error.code = 'invoice_pdf_timeout';
+          reject(error);
+        }, timeoutMs);
+      })
+    ]);
   } finally {
-    await browser.close();
+    clearTimeout(timer);
   }
-};
+}
+
+export async function generatePDF(htmlContent, outputPath, options = {}) {
+  const buffer = await generatePDFBuffer(htmlContent, options);
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await fs.writeFile(outputPath, buffer);
+  return { outputPath, size_bytes: buffer.length };
+}

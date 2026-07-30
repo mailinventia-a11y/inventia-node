@@ -11,6 +11,12 @@ function apiHeaders(includeJson = false) {
   if (includeJson) headers['Content-Type'] = 'application/json';
   return headers;
 }
+
+function v1Headers(includeJson = false) {
+  const headers = { 'Authorization': `Bearer ${localStorage.getItem('phase5AccessToken') || ''}` };
+  if (includeJson) headers['Content-Type'] = 'application/json';
+  return headers;
+}
 let calculatorMode = 'dims';
 let activeCalculatorProduct = null;
 
@@ -96,6 +102,25 @@ function restoreInterfacePreferences() {
   if (main) main.classList.toggle('expanded', shouldCollapseSidebar);
 }
 
+function initializeWorkspaceArchitecture() {
+  document.querySelectorAll('.workspace-page-hero').forEach(hero => {
+    if (hero.dataset.architectureReady === 'true') return;
+    const copy = hero.children[1];
+    const title = copy?.querySelector('h2')?.textContent?.trim();
+    if (!copy || !title) return;
+
+    const breadcrumb = document.createElement('nav');
+    breadcrumb.className = 'page-breadcrumb';
+    breadcrumb.setAttribute('aria-label', `${title} breadcrumb`);
+    breadcrumb.innerHTML = '<span>Workspace</span><i class="fa-solid fa-chevron-right" aria-hidden="true"></i>';
+    const current = document.createElement('strong');
+    current.textContent = title;
+    breadcrumb.appendChild(current);
+    copy.prepend(breadcrumb);
+    hero.dataset.architectureReady = 'true';
+  });
+}
+
 const settingsModules = {
   organization: { icon: 'fa-building', title: 'Organization', description: 'Company identity, operating locations, and regional defaults for this workspace.', items: ['Company Profile', 'Branches', 'Warehouses', 'Financial Year', 'Currency', 'Time Zone'] },
   users: { icon: 'fa-users-gear', title: 'Users & Permissions', description: 'Control who can access the workspace and what they can do.', items: ['Users', 'Roles', 'Permissions', 'Teams', 'Activity Logs'] },
@@ -115,13 +140,25 @@ const settingsModules = {
 const settingsDestinations = {
   'Users': 'staff', 'Roles': 'staff', 'Permissions': 'staff', 'Teams': 'staff', 'Activity Logs': 'staff',
   'Warehouses': 'warehouses-locations', 'Categories': 'brands-categories', 'Brands': 'brands-categories',
-  'Barcode & QR': 'inventory', 'Batch & Expiry': 'inventory', 'Reorder Rules': 'inventory',
+  'Barcode & QR': 'barcodes', 'Barcode Labels': 'barcodes', 'Batch & Expiry': 'inventory', 'Reorder Rules': 'inventory',
   'Invoice Settings': 'sales-page', 'Order Settings': 'sales-page', 'Backup & Restore': 'backup-tab',
-  'Invoices': 'sales-page'
+  'Invoices': 'invoices'
 };
 let settingsNavigationInitialized = false;
 let currencySymbol = '₹';
 let currencyCode = 'INR';
+let posPaymentMode = 'single';
+let posPaymentMethods = [
+  { method: 'CASH', label: 'Cash', enabled: true, requires_reference: false },
+  { method: 'CARD', label: 'Terminal Card', enabled: true, requires_reference: true },
+  { method: 'UPI', label: 'UPI', enabled: true, requires_reference: true },
+  { method: 'BANK_TRANSFER', label: 'Bank Transfer', enabled: true, requires_reference: true },
+  { method: 'CHEQUE', label: 'Cheque', enabled: true, requires_reference: true },
+  { method: 'CUSTOMER_CREDIT', label: 'Pay Later', enabled: true, requires_reference: false }
+];
+let posPaymentRows = [{ method: 'CASH', amount: 0, reference: '' }];
+let activeInvoiceDetail = null;
+let invoiceSearchTimer = null;
 
 // ================================================================
 // TOAST & NOTIFICATION SYSTEM IMPLEMENTATION
@@ -417,7 +454,7 @@ async function loadUniversalSearch(query) {
   resultsBox.innerHTML = '<div class="universal-search-group">Searching your business...</div>';
   resultsBox.classList.add('open');
   try {
-    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { headers: getAuthHeaders() });
+    const response = await fetch(`/api/v1/search?q=${encodeURIComponent(query)}`);
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || 'Search failed.');
     universalSearchItems = [
@@ -525,14 +562,25 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'F2') {
     e.preventDefault();
     switchTab('pos');
+    document.getElementById('posSearchInput')?.focus();
   }
   if (e.key === 'F4') {
     e.preventDefault();
-    openProductModal();
+    if (currentTab === 'barcodes') openBarcodeWorkspaceView('scanner');
+    else openScannerModal();
   }
   if (e.key === 'F8') {
     e.preventDefault();
-    openCustomerModal();
+    if (currentTab === 'pos') submitPOSCheckout();
+    else openCustomerModal();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && currentTab === 'pos') {
+    e.preventDefault();
+    submitPOSCheckout();
+  }
+  if (e.altKey && e.key.toLowerCase() === 'i') {
+    e.preventDefault();
+    switchTab('invoices');
   }
 });
 
@@ -594,6 +642,11 @@ function toggleThemeMode() {
 function toggleSidebarMenu() {
   const sidebar = document.querySelector('aside.sidebar');
   const main = document.querySelector('main.main-content');
+  if (window.matchMedia('(max-width: 768px)').matches) {
+    sidebar?.classList.toggle('mobile-open');
+    document.body.classList.toggle('sidebar-open', sidebar?.classList.contains('mobile-open'));
+    return;
+  }
   if (sidebar) sidebar.classList.toggle('collapsed');
   if (main) main.classList.toggle('expanded');
   localStorage.setItem('inventia_sidebar_collapsed', String(sidebar?.classList.contains('collapsed')));
@@ -629,32 +682,32 @@ function closeModal(modalId) {
 function openKeyboardShortcutsModal() {
   closeAllHeaderDropdowns();
   const m = document.getElementById('shortcutsModal');
-  if (m) m.style.display = 'flex';
+  if (m) m.style.display = 'grid';
 }
 function openHelpSupportModal() {
   closeAllHeaderDropdowns();
   const m = document.getElementById('helpModal');
-  if (m) m.style.display = 'flex';
+  if (m) m.style.display = 'grid';
 }
 function openPremiumOfferModal() {
   closeAllHeaderDropdowns();
   const m = document.getElementById('premiumModal');
-  if (m) m.style.display = 'flex';
+  if (m) m.style.display = 'grid';
 }
 function openSubscriptionModal() {
   closeAllHeaderDropdowns();
   const m = document.getElementById('premiumModal');
-  if (m) m.style.display = 'flex';
+  if (m) m.style.display = 'grid';
 }
 function openReferralModal() {
   closeAllHeaderDropdowns();
   const m = document.getElementById('referralModal');
-  if (m) m.style.display = 'flex';
+  if (m) m.style.display = 'grid';
 }
 function openAppDownloadModal() {
   closeAllHeaderDropdowns();
   const m = document.getElementById('appDownloadModal');
-  if (m) m.style.display = 'flex';
+  if (m) m.style.display = 'grid';
 }
 function copyReferralLink() {
   const input = document.getElementById('referralLinkInput');
@@ -676,42 +729,122 @@ function formatTimeAgo(timestamp) {
   return `${days}d ago`;
 }
 
-// Mock Data Store (Fallbacks if Express server / Supabase is loading/offline)
+// UI data mirrors; all production mutations are committed by the backend.
 let brands = [];
 let categories = [];
 let products = [];
 let customers = [];
+let suppliers = [];
 let sales = [];
 let transfers = [];
 let warehouses = [];
 let staff = [];
+let barcodeProducts = [];
+let barcodeTemplates = [];
+let barcodeLayouts = [];
+let barcodeSettings = null;
+let activeBarcodeView = 'overview';
+let selectedBarcodeAssignments = new Set();
+let barcodeProductSearchTimer = null;
+let barcodeCameraStream = null;
+let barcodeCameraTimer = null;
 
-// Intercept all API fetches to inject the auth token and role headers dynamically
+const BARCODE_VIEW_ROUTES = Object.freeze({
+  overview: '/barcodes',
+  products: '/barcodes/products',
+  generate: '/barcodes/generate',
+  designer: '/barcodes/templates',
+  batch: '/barcodes/batch-print',
+  scanner: '/barcodes/scanner',
+  queue: '/barcodes/print-queue',
+  history: '/barcodes/history',
+  analytics: '/barcodes/analytics',
+  recommendations: '/barcodes/recommendations',
+  settings: '/barcodes/settings'
+});
+
+const BARCODE_ROUTE_VIEWS = new Map(
+  Object.entries(BARCODE_VIEW_ROUTES).map(([view, route]) => [route, view])
+);
+
+function normalizeClientPath(pathname = window.location.pathname) {
+  const normalized = String(pathname || '/').replace(/\/+$/, '');
+  return normalized || '/';
+}
+
+function barcodeViewForRoute(pathname = window.location.pathname) {
+  return BARCODE_ROUTE_VIEWS.get(normalizeClientPath(pathname)) || null;
+}
+
+function syncBarcodeClientRoute(view, { replace = false } = {}) {
+  const route = BARCODE_VIEW_ROUTES[view];
+  if (!route || normalizeClientPath() === route) return;
+  window.history[replace ? 'replaceState' : 'pushState'](
+    { tab: 'barcodes', barcodeView: view },
+    '',
+    route
+  );
+}
+
+function restoreBarcodeClientRoute() {
+  const view = barcodeViewForRoute();
+  if (!view) return false;
+  openBarcodeWorkspaceView(view, null, { syncHistory: false })
+    .catch(error => showToast(error.message, 'error'));
+  return true;
+}
+
+window.addEventListener('popstate', () => {
+  const view = barcodeViewForRoute();
+  if (view) {
+    openBarcodeWorkspaceView(view, null, { syncHistory: false })
+      .catch(error => showToast(error.message, 'error'));
+  } else if (currentTab === 'barcodes') {
+    switchTab('dashboard');
+  }
+});
+
+// Inject the appropriate compatibility or Phase 5 access token and rotate sessions.
 const originalFetch = window.fetch;
-window.fetch = function (url, options = {}) {
+window.fetch = async function (url, options = {}) {
   const cleanUrl = typeof url === 'string' ? url : (url.url || '');
-  if (cleanUrl.startsWith('/api/') && !cleanUrl.includes('/api/auth/login')) {
-    const token = localStorage.getItem('token');
+  const isV1 = cleanUrl.startsWith('/api/v1/');
+  const isAuthRequest = cleanUrl.includes('/auth/login') || cleanUrl.includes('/auth/refresh');
+  if (cleanUrl.startsWith('/api/') && !isAuthRequest) {
+    const token = localStorage.getItem(isV1 ? 'phase5AccessToken' : 'token');
     const role = localStorage.getItem('role');
     const userId = localStorage.getItem('userId');
 
     if (token) {
-      options.headers = options.headers || {};
-      if (options.headers instanceof Headers) {
-        options.headers.set('Authorization', `Bearer ${token}`);
-        if (role) options.headers.set('x-user-role', role);
-        if (userId) options.headers.set('x-user-id', userId);
-      } else {
-        options.headers = {
-          ...options.headers,
-          'Authorization': `Bearer ${token}`,
-          'x-user-role': role,
-          'x-user-id': userId
-        };
+      const headers = new Headers(options.headers || {});
+      headers.set('Authorization', `Bearer ${token}`);
+      if (!isV1 && role) headers.set('x-user-role', role);
+      if (!isV1 && userId) headers.set('x-user-id', userId);
+      if (!isV1 && localStorage.getItem('activeOrganizationId')) {
+        headers.set('x-inventia-organization', localStorage.getItem('activeOrganizationId'));
       }
+      if (isV1 && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(options.method || 'GET').toUpperCase()) && !headers.has('Idempotency-Key')) {
+        headers.set('Idempotency-Key', crypto.randomUUID());
+      }
+      options.headers = headers;
     }
   }
-  return originalFetch(url, options);
+  let response = await originalFetch(url, options);
+  if (isV1 && response.status === 401 && !isAuthRequest && localStorage.getItem('phase5RefreshToken')) {
+    const refreshResponse = await originalFetch('/api/v1/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: localStorage.getItem('phase5RefreshToken') })
+    });
+    if (refreshResponse.ok) {
+      const session = await refreshResponse.json();
+      savePhase5Session(session);
+      const retryHeaders = new Headers(options.headers || {});
+      retryHeaders.set('Authorization', `Bearer ${session.access_token}`);
+      response = await originalFetch(url, { ...options, headers: retryHeaders });
+    }
+  }
+  return response;
 };
 
 // Auth and Session Helper Functions
@@ -740,11 +873,19 @@ function updateProfileUI() {
   if (profileRoleEl) profileRoleEl.innerText = role.charAt(0).toUpperCase() + role.slice(1);
   if (profileAvatarEl && name) profileAvatarEl.innerText = name.charAt(0).toUpperCase();
 
-  // Update Welcome text in Dashboard
+  // Update the executive dashboard greeting without disturbing its layout.
+  const dashboardUserName = document.getElementById('dashboardUserName');
+  const dashboardGreeting = document.getElementById('dashboardGreeting');
+  if (dashboardUserName) dashboardUserName.innerText = name.split(' ')[0];
+  if (dashboardGreeting) {
+    const hour = new Date().getHours();
+    dashboardGreeting.innerText = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  }
+
   const welcomeEl = document.querySelector('.dashboard-welcome');
   if (welcomeEl) {
     const timeSpan = document.getElementById('liveTimestamp');
-    welcomeEl.innerHTML = `Welcome back, ${name}! | <span id="liveTimestamp">${timeSpan ? timeSpan.innerHTML : ''}</span>`;
+    welcomeEl.innerHTML = `Here is your business at a glance · <span id="liveTimestamp">${timeSpan ? timeSpan.innerHTML : ''}</span>`;
   }
 
   // Role-based navigation button visibility
@@ -785,6 +926,7 @@ async function handleLoginSubmit(event) {
   
   const username = usernameEl.value.trim();
   const password = passwordEl.value;
+  const organizationSlug = document.getElementById('loginOrganization')?.value.trim() || 'northwind-interiors';
   
   if (errorEl) {
     errorEl.style.display = 'none';
@@ -792,10 +934,10 @@ async function handleLoginSubmit(event) {
   }
 
   try {
-    const res = await fetch('/api/auth/login', {
+    const res = await originalFetch('/api/v1/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ organization_slug: organizationSlug, username, password })
     });
 
     const contentType = res.headers.get('content-type');
@@ -806,16 +948,31 @@ async function handleLoginSubmit(event) {
     }
 
     const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Invalid username or password.');
+    if (!res.ok) {
+      throw new Error(data.error?.message || 'Invalid organization, username, or password.');
     }
 
-    // Save session
-    localStorage.setItem('token', data.token);
+    savePhase5Session(data);
     localStorage.setItem('userId', data.user.id);
     localStorage.setItem('username', data.user.username);
     localStorage.setItem('fullName', data.user.full_name);
     localStorage.setItem('role', data.user.role);
+    localStorage.setItem('activeOrganizationId', data.organization.id);
+    localStorage.setItem('activeOrganizationSlug', data.organization.slug);
+    localStorage.setItem('activeOrganizationName', data.organization.name);
+
+    // Keep Phase 1-4 compatibility routes active for the default tenant during migration.
+    const legacyResponse = await originalFetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    if (legacyResponse.ok) {
+      const legacy = await legacyResponse.json();
+      if (legacy.success && legacy.token) localStorage.setItem('token', legacy.token);
+    } else {
+      localStorage.setItem('token', data.access_token);
+    }
 
     // Hide Login container
     const loginContainer = document.getElementById('loginContainer');
@@ -837,8 +994,16 @@ async function handleLoginSubmit(event) {
   }
 }
 
-function logout() {
+async function logout() {
   currentAiConversationId = null;
+  const refreshToken = localStorage.getItem('phase5RefreshToken');
+  if (refreshToken) {
+    await originalFetch('/api/v1/auth/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    }).catch(() => {});
+  }
   localStorage.clear();
   
   // Show Login Overlay
@@ -853,6 +1018,7 @@ function initializePOSApp() {
   setupNavigation();
   initializeSettingsNavigation();
   initializeWorkspaceSwitcher();
+  initializeWorkspaceArchitecture();
   loadDashboardData();
   loadPOSCatalog();
   renderPOSCategoryFilters();
@@ -871,6 +1037,9 @@ function initializePOSApp() {
   startLiveTimestamp();
   loadDashboardAi();
   loadAiStatus();
+  loadEnterpriseWorkspaces();
+  loadPosPaymentMethods();
+  restoreBarcodeClientRoute();
   
   // Connect APIs if online
   fetch('/api/status')
@@ -879,8 +1048,8 @@ function initializePOSApp() {
       console.log('Backend server is alive, loading live database records...');
       syncWithBackend();
     })
-    .catch(e => {
-      console.log('Running in local browser simulator mode. Set up Supabase credentials in .env to use live DB.');
+    .catch(() => {
+      showToast('The backend is unavailable. Changes are disabled until the connection recovers.', 'error');
   });
 }
 
@@ -938,15 +1107,9 @@ function openSettingsSection(section) {
 }
 
 function initializeWorkspaceSwitcher() {
-  const savedWorkspace = localStorage.getItem('inventia_workspace');
-  if (savedWorkspace) {
-    try {
-      const workspace = JSON.parse(savedWorkspace);
-      updateWorkspaceLabel(workspace.name, workspace.description);
-    } catch (_) {
-      localStorage.removeItem('inventia_workspace');
-    }
-  }
+  const activeName = localStorage.getItem('activeOrganizationName');
+  if (activeName) updateWorkspaceLabel(activeName, 'Active organization');
+  loadOrganizationMenu();
   if (!document.body.dataset.workspaceListenerReady) {
     document.addEventListener('click', event => {
       if (!event.target.closest('.workspace-switcher') && !event.target.closest('.workspace-menu')) {
@@ -972,12 +1135,23 @@ function closeWorkspaceMenu() {
   document.querySelector('.workspace-switcher')?.setAttribute('aria-expanded', 'false');
 }
 
-function selectWorkspace(name, description) {
-  updateWorkspaceLabel(name, description);
-  localStorage.setItem('inventia_workspace', JSON.stringify({ name, description }));
-  document.querySelectorAll('.workspace-menu button').forEach(button => button.classList.toggle('active', button.textContent.includes(name)));
-  closeWorkspaceMenu();
-  showToast(`Switched to ${name}.`, 'success');
+async function selectOrganization(organizationId) {
+  if (organizationId === localStorage.getItem('activeOrganizationId')) return closeWorkspaceMenu();
+  try {
+    const response = await fetch(`/api/v1/organizations/${encodeURIComponent(organizationId)}/switch`, { method: 'POST' });
+    const session = await response.json();
+    if (!response.ok) throw new Error(session.error?.message || 'Organization switch failed.');
+    savePhase5Session(session);
+    localStorage.setItem('activeOrganizationId', session.organization.id);
+    localStorage.setItem('activeOrganizationSlug', session.organization.slug);
+    localStorage.setItem('activeOrganizationName', session.organization.name);
+    updateWorkspaceLabel(session.organization.name, 'Active organization');
+    closeWorkspaceMenu();
+    await loadEnterpriseWorkspaces();
+    showToast(`Switched to ${session.organization.name}.`, 'success');
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
 }
 
 function updateWorkspaceLabel(name, description) {
@@ -987,11 +1161,288 @@ function updateWorkspaceLabel(name, description) {
   if (avatar) avatar.textContent = name.split(/\s+/).map(word => word[0]).join('').slice(0, 2).toUpperCase();
 }
 
+function savePhase5Session(session) {
+  localStorage.setItem('phase5AccessToken', session.access_token);
+  localStorage.setItem('phase5RefreshToken', session.refresh_token);
+  if (session.user) {
+    localStorage.setItem('userId', session.user.id);
+    localStorage.setItem('username', session.user.username);
+    localStorage.setItem('fullName', session.user.full_name);
+    localStorage.setItem('role', session.user.role);
+  }
+}
+
+async function loadOrganizationMenu() {
+  const container = document.getElementById('organizationMenuItems');
+  if (!container || !localStorage.getItem('phase5AccessToken')) return;
+  try {
+    const response = await fetch('/api/v1/organizations');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Could not load organizations.');
+    container.innerHTML = data.organizations.map(organization => `
+      <button type="button" class="${organization.id === data.active_organization_id ? 'active' : ''}" onclick="selectOrganization('${organization.id}')">
+        <span>${escapeHtml(getInitials(organization.name))}</span>
+        ${escapeHtml(organization.name)}
+        ${organization.id === data.active_organization_id ? '<i class="fa-solid fa-check"></i>' : ''}
+      </button>`).join('');
+  } catch (error) {
+    container.innerHTML = `<button type="button"><span>!</span> ${escapeHtml(error.message)}</button>`;
+  }
+}
+
+async function createOrganization() {
+  const name = window.prompt('Organization name');
+  if (!name) return;
+  const suggested = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const slug = window.prompt('Organization slug', suggested);
+  if (!slug) return;
+  try {
+    const response = await fetch('/api/v1/organizations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, slug })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Organization creation failed.');
+    await loadOrganizationMenu();
+    showToast(`${data.name} was provisioned with an isolated database.`, 'success');
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+const enterpriseWorkspace = {
+  suppliers: [],
+  purchaseOrders: [],
+  approvals: []
+};
+
+async function loadEnterpriseWorkspaces() {
+  if (!localStorage.getItem('phase5AccessToken')) return;
+  try {
+    const [supplierResponse, orderResponse, approvalResponse, productResponse, warehouseResponse] = await Promise.all([
+      fetch('/api/v1/suppliers'),
+      fetch('/api/v1/trade/purchase-orders'),
+      fetch('/api/v1/approvals'),
+      fetch('/api/v1/products?limit=500'),
+      fetch('/api/v1/reference/warehouses')
+    ]);
+    const responses = [supplierResponse, orderResponse, approvalResponse, productResponse, warehouseResponse];
+    const payloads = await Promise.all(responses.map(response => response.json()));
+    const failedIndex = responses.findIndex(response => !response.ok);
+    if (failedIndex >= 0) throw new Error(payloads[failedIndex].error?.message || 'Enterprise workspace could not be loaded.');
+    enterpriseWorkspace.suppliers = payloads[0].suppliers;
+    enterpriseWorkspace.purchaseOrders = payloads[1].documents;
+    enterpriseWorkspace.approvals = payloads[2].approvals;
+    suppliers = enterpriseWorkspace.suppliers;
+    products = payloads[3].products.map(product => ({ ...product, stock: Number(product.quantity_on_hand || 0) }));
+    warehouses = payloads[4].items;
+    renderEnterpriseSuppliers();
+    renderEnterprisePurchases();
+    await loadEnterpriseDashboard();
+  } catch (error) {
+    const purchaseTable = document.getElementById('purchaseOrdersTable');
+    const supplierTable = document.getElementById('suppliersTable');
+    if (purchaseTable) purchaseTable.innerHTML = `<tr><td colspan="6">${escapeHtml(error.message)}</td></tr>`;
+    if (supplierTable) supplierTable.innerHTML = `<tr><td colspan="6">${escapeHtml(error.message)}</td></tr>`;
+  }
+}
+
+async function loadEnterpriseDashboard() {
+  const response = await fetch('/api/v1/dashboard/summary');
+  const summary = await response.json();
+  if (!response.ok) throw new Error(summary.error?.message || 'Dashboard summary could not be loaded.');
+  const values = {
+    kpiSales: summary.today_sale_count,
+    kpiRevenue: `${currencySymbol}${Number(summary.today_revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    kpiProfit: `${currencySymbol}${Number(summary.gross_profit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    kpiLowStock: summary.low_stock_count,
+    kpiCustomers: summary.customer_count,
+    kpiOutstanding: `${currencySymbol}${Number(summary.customer_outstanding || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    dashboardCustomerCount: summary.customer_count,
+    dashboardOrderCount: summary.sale_count,
+    dashboardProductCount: summary.product_count,
+    kpiValuation: `${currencySymbol}${Number(summary.inventory_value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  };
+  Object.entries(values).forEach(([id, value]) => {
+    const element = document.getElementById(id);
+    if (element) element.textContent = value;
+  });
+}
+
+function renderEnterpriseSuppliers() {
+  const table = document.getElementById('suppliersTable');
+  if (!table) return;
+  if (!enterpriseWorkspace.suppliers.length) {
+    table.innerHTML = '<tr><td colspan="6">No suppliers yet. Add the first supplier to begin purchasing.</td></tr>';
+    return;
+  }
+  table.innerHTML = enterpriseWorkspace.suppliers.map(supplier => `
+    <tr>
+      <td><strong>${escapeHtml(supplier.name)}</strong><small>${escapeHtml(supplier.legal_name || '')}</small></td>
+      <td>${escapeHtml(supplier.email || supplier.phone || '—')}</td>
+      <td>${escapeHtml(supplier.profile_gstin || supplier.gstin || '—')}</td>
+      <td>${Number(supplier.payment_terms_days || supplier.payment_terms || 0)} days</td>
+      <td>${Number(supplier.lead_time_days || 0)} days</td>
+      <td>${supplier.rating == null ? '—' : `${Number(supplier.rating).toFixed(1)} / 5`}</td>
+    </tr>`).join('');
+}
+
+function renderEnterprisePurchases() {
+  const table = document.getElementById('purchaseOrdersTable');
+  if (!table) return;
+  if (!enterpriseWorkspace.purchaseOrders.length) {
+    table.innerHTML = '<tr><td colspan="6">No purchase orders yet. New orders remain drafts until submitted and approved.</td></tr>';
+    return;
+  }
+  table.innerHTML = enterpriseWorkspace.purchaseOrders.map(order => {
+    const approval = enterpriseWorkspace.approvals.find(item => item.entity_type === 'purchase_order' && String(item.entity_id) === String(order.id) && item.status === 'pending');
+    const actions = [];
+    if (order.status === 'draft') actions.push(`<button class="action-btn secondary compact" onclick="submitPurchaseForApproval(${order.id})">Submit</button>`);
+    if (order.status === 'pending_approval' && approval && ['admin', 'manager'].includes(localStorage.getItem('role'))) {
+      actions.push(`<button class="action-btn primary compact" onclick="approvePurchaseOrder(${approval.id})">Approve</button>`);
+    }
+    if (['approved', 'partially_fulfilled'].includes(order.status)) actions.push(`<button class="action-btn secondary compact" onclick="receivePurchaseOrder(${order.id})">Receive</button>`);
+    return `<tr>
+      <td><strong>${escapeHtml(order.document_no)}</strong></td>
+      <td>${escapeHtml(order.party_name || `Supplier #${order.party_id}`)}</td>
+      <td>${currencySymbol}${Number(order.grand_total || 0).toFixed(2)}</td>
+      <td><span class="status-badge ${escapeHtml(order.status)}">${escapeHtml(order.status.replace(/_/g, ' '))}</span></td>
+      <td>${new Date(order.created_at).toLocaleDateString()}</td>
+      <td><div class="panel-actions">${actions.join('') || '—'}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+function openSupplierModal() {
+  document.getElementById('supplierModal').style.display = 'grid';
+}
+
+async function submitEnterpriseSupplier(event) {
+  event.preventDefault();
+  const submit = event.submitter;
+  await executeAction(submit, async () => {
+    const payload = {
+      name: document.getElementById('supplierName').value.trim(),
+      legal_name: document.getElementById('supplierLegalName').value.trim() || undefined,
+      email: document.getElementById('supplierEmail').value.trim() || undefined,
+      phone: document.getElementById('supplierPhone').value.trim() || undefined,
+      gstin: document.getElementById('supplierGstin').value.trim() || undefined,
+      payment_terms_days: Number(document.getElementById('supplierTerms').value || 0),
+      lead_time_days: Number(document.getElementById('supplierLeadTime').value || 0),
+      rating: document.getElementById('supplierRating').value ? Number(document.getElementById('supplierRating').value) : undefined
+    };
+    const response = await fetch('/api/v1/suppliers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Supplier creation failed.');
+    closeModal('supplierModal');
+    event.target.reset();
+    await loadEnterpriseWorkspaces();
+  }, 'Supplier saved successfully.');
+}
+
+function openPurchaseOrderModal() {
+  const supplierSelect = document.getElementById('purchaseSupplier');
+  const warehouseSelect = document.getElementById('purchaseWarehouse');
+  const productSelect = document.getElementById('purchaseProduct');
+  supplierSelect.innerHTML = enterpriseWorkspace.suppliers.map(item => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
+  warehouseSelect.innerHTML = warehouses.map(item => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
+  productSelect.innerHTML = products.map(item => `<option value="${item.id}">${escapeHtml(item.sku)} — ${escapeHtml(item.name)}</option>`).join('');
+  if (!supplierSelect.options.length || !warehouseSelect.options.length || !productSelect.options.length) {
+    showToast('Add a supplier, warehouse, and product before creating a purchase order.', 'info');
+    return;
+  }
+  prefillPurchaseCost();
+  document.getElementById('purchaseOrderModal').style.display = 'grid';
+}
+
+function prefillPurchaseCost() {
+  const productId = Number(document.getElementById('purchaseProduct')?.value);
+  const product = products.find(item => Number(item.id) === productId);
+  if (product) document.getElementById('purchaseUnitCost').value = Number(product.cost_price || 0).toFixed(2);
+}
+
+async function submitEnterprisePurchaseOrder(event) {
+  event.preventDefault();
+  await executeAction(event.submitter, async () => {
+    const expectedValue = document.getElementById('purchaseExpectedAt').value;
+    const payload = {
+      party_id: Number(document.getElementById('purchaseSupplier').value),
+      warehouse_id: Number(document.getElementById('purchaseWarehouse').value),
+      expected_at: expectedValue ? new Date(expectedValue).toISOString() : undefined,
+      notes: document.getElementById('purchaseNotes').value.trim() || undefined,
+      lines: [{
+        product_id: Number(document.getElementById('purchaseProduct').value),
+        quantity: Number(document.getElementById('purchaseQuantity').value),
+        unit_price: Number(document.getElementById('purchaseUnitCost').value)
+      }]
+    };
+    const response = await fetch('/api/v1/trade/purchase-orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Purchase order creation failed.');
+    closeModal('purchaseOrderModal');
+    event.target.reset();
+    await loadEnterpriseWorkspaces();
+  }, 'Purchase order draft created.');
+}
+
+async function submitPurchaseForApproval(orderId) {
+  await runEnterpriseMutation(`/api/v1/trade/purchase-orders/${orderId}/transition`, { status: 'pending_approval' }, 'Purchase order submitted for approval.');
+}
+
+async function approvePurchaseOrder(approvalId) {
+  await runEnterpriseMutation(`/api/v1/approvals/${approvalId}/approve`, {}, 'Purchase order approved.');
+}
+
+async function receivePurchaseOrder(orderId) {
+  try {
+    const response = await fetch(`/api/v1/trade/purchase-orders/${orderId}`);
+    const order = await response.json();
+    if (!response.ok) throw new Error(order.error?.message || 'Could not load the purchase order.');
+    const items = order.lines
+      .map(line => ({ line_id: line.id, quantity: Number(line.quantity) - Number(line.fulfilled_quantity) }))
+      .filter(item => item.quantity > 0);
+    if (!items.length) throw new Error('This purchase order is already fully received.');
+    await runEnterpriseMutation(`/api/v1/trade/purchase-orders/${orderId}/receive`, {
+      warehouse_id: order.warehouse_id,
+      items
+    }, 'Goods receipt posted and stock updated.');
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function runEnterpriseMutation(url, body, successMessage) {
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'The operation failed.');
+    await loadEnterpriseWorkspaces();
+    showToast(successMessage, 'success');
+    return data;
+  } catch (error) {
+    showToast(error.message, 'error');
+    throw error;
+  }
+}
+
 // Initialize UI
 document.addEventListener('DOMContentLoaded', () => {
   restoreInterfacePreferences();
   initNotifications();
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('phase5AccessToken');
   if (token) {
     // Hide login screen
     const loginContainer = document.getElementById('loginContainer');
@@ -1016,23 +1467,26 @@ async function syncWithBackend() {
   try {
     const headers = apiHeaders();
 
-    const pRes = await fetch('/api/inventory/products', { headers });
-    if (pRes.ok) products = await pRes.json();
+    const pRes = await fetch('/api/v1/products?limit=500');
+    if (pRes.ok) {
+      const data = await pRes.json();
+      products = data.products.map(product => ({ ...product, stock: Number(product.quantity_on_hand || 0) }));
+    }
 
-    const cRes = await fetch('/api/sales/customers', { headers });
-    if (cRes.ok) customers = await cRes.json();
+    const cRes = await fetch('/api/v1/customers');
+    if (cRes.ok) customers = (await cRes.json()).customers;
 
-    const bRes = await fetch('/api/inventory/brands', { headers });
-    if (bRes.ok) brands = await bRes.json();
+    const bRes = await fetch('/api/v1/reference/brands');
+    if (bRes.ok) brands = (await bRes.json()).items;
 
-    const catRes = await fetch('/api/inventory/categories', { headers });
-    if (catRes.ok) categories = await catRes.json();
+    const catRes = await fetch('/api/v1/reference/categories');
+    if (catRes.ok) categories = (await catRes.json()).items;
 
-    const wRes = await fetch('/api/inventory/warehouses', { headers });
-    if (wRes.ok) warehouses = await wRes.json();
+    const wRes = await fetch('/api/v1/reference/warehouses');
+    if (wRes.ok) warehouses = (await wRes.json()).items;
 
-    const sRes = await fetch('/api/sales', { headers });
-    if (sRes.ok) sales = await sRes.json();
+    const sRes = await fetch('/api/v1/sales');
+    if (sRes.ok) sales = (await sRes.json()).sales;
 
     const stRes = await fetch('/api/users', { headers });
     if (stRes.ok) staff = await stRes.json();
@@ -1184,12 +1638,14 @@ function setupNavigation() {
       e.stopPropagation();
       const tabName = item.getAttribute('data-tab');
       const reportType = item.getAttribute('data-report-type');
+      const barcodeView = item.getAttribute('data-barcode-view');
 
       switchTab(tabName, reportType, item);
 
       if (reportType) {
         switchReportTab(reportType);
       }
+      if (barcodeView) openBarcodeWorkspaceView(barcodeView);
     });
   });
 }
@@ -1230,9 +1686,16 @@ function switchTab(tabName, reportType = null, sourceItem = null) {
   document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
   targetPanel.classList.add('active');
   currentTab = tabName;
+  if (tabName !== 'barcodes' && barcodeViewForRoute()) {
+    window.history.pushState({ tab: tabName }, '', '/');
+  }
+  document.querySelector('aside.sidebar')?.classList.remove('mobile-open');
+  document.body.classList.remove('sidebar-open');
   window.scrollTo(0, 0);
   if (tabName === 'finance') loadFinanceWorkspace();
   if (tabName === 'automation') loadAiWorkspace();
+  if (tabName === 'invoices') loadInvoices();
+  if (tabName === 'barcodes') loadBarcodeWorkspace();
 }
 
 // ================= MODULE 1: DASHBOARD =================
@@ -1246,6 +1709,8 @@ function loadDashboardData() {
   const todaySales = sales.filter(s => new Date(s.sale_date).toDateString() === todayStr);
   const todaySalesCount = todaySales.length;
   const todayRevenue = todaySales.reduce((acc, s) => acc + (s.total || 0), 0);
+  const estimatedProfit = sales.reduce((acc, sale) => acc + Number(sale.profit || (sale.total || 0) * 0.527), 0);
+  const outstandingBalance = customers.reduce((acc, customer) => acc + Math.max(0, Number(customer.balance || 0)), 0);
 
   // Update Top Cards
   const elSales = document.getElementById('kpiSales');
@@ -1256,9 +1721,15 @@ function loadDashboardData() {
 
   const elVal = document.getElementById('kpiValuation');
   if (elVal) elVal.innerText = `${currencySymbol}${totalValuation.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+  const elProfit = document.getElementById('kpiProfit');
+  if (elProfit) elProfit.innerText = `${currencySymbol}${estimatedProfit.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+  const elOutstanding = document.getElementById('kpiOutstanding');
+  if (elOutstanding) elOutstanding.innerText = `${currencySymbol}${outstandingBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
   
   const elLow = document.getElementById('kpiLowStock');
-  if (elLow) elLow.innerText = `${lowStockCount} Products`;
+  if (elLow) elLow.innerText = lowStockCount;
   
   const elCustKpi = document.getElementById('kpiCustomers');
   if (elCustKpi) elCustKpi.innerText = customers.length;
@@ -1379,8 +1850,17 @@ function loadDashboardData() {
   loadCustomerLedger();
 }
 
-function downloadInvoice(saleId) {
-  window.open(`/api/sales/invoice/${saleId}/pdf`, '_blank');
+async function downloadInvoice(saleId) {
+  try {
+    const response = await fetch('/api/v1/invoices');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Invoice could not be resolved.');
+    const invoice = (data.invoices || []).find(item => Number(item.sale_id) === Number(saleId));
+    if (!invoice) throw new Error('This legacy sale does not have a migrated GST invoice yet.');
+    await downloadInvoicePdf(Number(invoice.id));
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
 }
 
 // ================= MODULE 2: POS CATALOG & CART =================
@@ -1479,23 +1959,38 @@ function closeScannerModal() {
   document.getElementById('scannerModal').classList.remove('active');
 }
 
-function handleScanSubmit(event) {
+async function handleScanSubmit(event) {
   event.preventDefault();
-  const code = document.getElementById('manualScanInput').value.trim().toLowerCase();
+  const code = document.getElementById('manualScanInput').value.trim();
   if (!code) return;
-
-  const product = products.find(p => 
-    (p.barcode && p.barcode.toLowerCase() === code) || 
-    p.sku.toLowerCase() === code ||
-    p.name.toLowerCase().includes(code)
-  );
-
-  if (product) {
-    addToCart(product.id);
-    closeScannerModal();
+  try {
+    const response = await fetch('/api/v1/barcode-scans/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ barcode_value: code, source: 'POS', action: 'ADD_TO_POS' })
+    });
+    const result = await response.json();
+    if (!response.ok && !result.resolved) {
+      showToast(`Unknown barcode: ${code}`, 'error');
+      if (confirm('This barcode is not assigned. Open the Barcode & Label Center to map it?')) {
+        closeScannerModal();
+        switchTab('barcodes');
+        openBarcodeWorkspaceView('generate');
+        const manual = document.getElementById('barcodeAssignValue');
+        if (manual) manual.value = code;
+      }
+      return;
+    }
+    if (!result.product) throw new Error('The barcode did not resolve to an active product.');
+    if (Number(result.product.available_stock || 0) <= 0) {
+      throw new Error(`${result.product.name} is out of stock.`);
+    }
+    addToCart(Number(result.product.id));
+    showToast(`${result.product.name} added by barcode.`, 'success');
     document.getElementById('manualScanInput').value = '';
-  } else {
-    alert(`No product found matching barcode or SKU: "${code}"`);
+    document.getElementById('manualScanInput').focus();
+  } catch (error) {
+    showToast(error.message || 'Barcode scan failed.', 'error');
   }
 }
 
@@ -1541,6 +2036,7 @@ function recalculateCart() {
     document.getElementById('cartSubtotal').innerText = `${currencySymbol}0.00`;
     document.getElementById('cartTax').innerText = `${currencySymbol}0.00`;
     document.getElementById('cartGrandTotal').innerText = `${currencySymbol}0.00`;
+    syncPosPaymentAmounts();
     return;
   }
 
@@ -1575,13 +2071,12 @@ function recalculateCart() {
     list.appendChild(row);
   });
 
-  const discount = Number(document.getElementById('cartDiscount').value) || 0;
-  const tax = (subtotal - discount) * 0.1;
-  const grandTotal = subtotal - discount + tax;
+  const preview = calculatePosInvoicePreview();
 
   document.getElementById('cartSubtotal').innerText = `${currencySymbol}${subtotal.toFixed(2)}`;
-  document.getElementById('cartTax').innerText = `${currencySymbol}${tax.toFixed(2)}`;
-  document.getElementById('cartGrandTotal').innerText = `${currencySymbol}${grandTotal.toFixed(2)}`;
+  document.getElementById('cartTax').innerText = `${currencySymbol}${preview.tax.toFixed(2)}`;
+  document.getElementById('cartGrandTotal').innerText = `${currencySymbol}${preview.total.toFixed(2)}`;
+  syncPosPaymentAmounts();
 }
 
 function updateCartQty(index, value) {
@@ -1599,147 +2094,558 @@ function clearCart() {
   recalculateCart();
 }
 
-// Complete checkout
-async function submitPOSCheckout() {
-  if (cart.length === 0) {
-    alert('Billing cart is empty.');
-    return;
-  }
-
-  const customerId = document.getElementById('cartCustomerSelect').value;
-  const warehouseId = document.getElementById('cartWarehouseSelect').value;
-  const discount = document.getElementById('cartDiscount').value;
-  const paymentMethod = document.querySelector('input[name="payment_method"]:checked').value;
-
-  const payload = {
-    customer_id: customerId ? parseInt(customerId) : null,
-    warehouse_id: parseInt(warehouseId),
-    items: cart.map(item => ({ product_id: item.product_id, quantity: item.quantity, unit_price: item.unit_price })),
-    discount: parseFloat(discount) || 0,
-    payment_method: paymentMethod
-  };
-
-  // If payment method is Razorpay, open Razorpay popup
-  if (paymentMethod === 'razorpay') {
-    const subtotalCalc = cart.reduce((acc, i) => acc + (i.quantity * i.unit_price), 0);
-    const discountCalc = parseFloat(discount) || 0;
-    const taxCalc = (subtotalCalc - discountCalc) * 0.1;
-    const grandTotalCalc = subtotalCalc - discountCalc + taxCalc;
-
-    try {
-      const orderRes = await fetch('/api/sales/razorpay/create-order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-          'x-user-role': 'cashier'
-        },
-        body: JSON.stringify({ amount: grandTotalCalc, receipt: 'rcpt_' + Date.now() })
-      });
-      const orderData = await orderRes.json();
-      await ensureRazorpayLoaded();
-
-      if (window.Razorpay) {
-        const options = {
-          key: orderData.key_id,
-          amount: orderData.amount,
-          currency: orderData.currency || 'INR',
-          name: 'Inventia POS Terminal',
-          description: `POS Checkout (${cart.length} items)`,
-          order_id: orderData.order_id,
-          handler: async function (response) {
-            payload.payment_status = 'completed';
-            payload.razorpay_payment_id = response.razorpay_payment_id;
-            await executeFinalCheckoutPayload(payload);
-          },
-          prefill: {
-            name: document.getElementById('cartCustomerSearchInput').value || 'Walk-in Customer'
-          },
-          theme: { color: '#0284c7' }
-        };
-        const rzp1 = new window.Razorpay(options);
-        rzp1.open();
-        return;
+function calculatePosInvoicePreview() {
+  const grossMinor = cart.map(item => Math.round(Number(item.quantity) * Number(item.unit_price) * 100));
+  const subtotalMinor = grossMinor.reduce((sum, value) => sum + value, 0);
+  const discountMinor = Math.min(Math.max(Math.round((Number(document.getElementById('cartDiscount')?.value) || 0) * 100), 0), subtotalMinor);
+  const exactDiscounts = grossMinor.map(value => subtotalMinor ? discountMinor * value / subtotalMinor : 0);
+  const lineDiscounts = exactDiscounts.map(value => Math.floor(value));
+  let remainder = discountMinor - lineDiscounts.reduce((sum, value) => sum + value, 0);
+  exactDiscounts
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((a, b) => b.fraction - a.fraction || a.index - b.index)
+    .forEach(entry => {
+      if (remainder > 0) {
+        lineDiscounts[entry.index] += 1;
+        remainder -= 1;
       }
-    } catch (rzpErr) {
-      console.warn('Razorpay SDK notice, proceeding with simulated payment:', rzpErr);
-    }
-  }
-
-  await executeFinalCheckoutPayload(payload);
+    });
+  const taxMinor = cart.reduce((sum, item, index) => {
+    const product = products.find(entry => Number(entry.id) === Number(item.product_id));
+    const taxableMinor = grossMinor[index] - lineDiscounts[index];
+    return sum + Math.round(taxableMinor * Number(product?.gst_rate || 0) / 100);
+  }, 0);
+  return {
+    subtotal: subtotalMinor / 100,
+    discount: discountMinor / 100,
+    tax: taxMinor / 100,
+    total: (subtotalMinor - discountMinor + taxMinor) / 100,
+    totalMinor: subtotalMinor - discountMinor + taxMinor
+  };
 }
 
-async function executeFinalCheckoutPayload(payload) {
-  const btn = document.getElementById('checkoutBtn') || document.querySelector('.checkout-btn');
-  
-  const subtotal = cart.reduce((acc, i) => acc + (i.quantity * i.unit_price), 0);
-  const discountVal = payload.discount || 0;
-  const grandTotalVal = subtotal - discountVal + ((subtotal - discountVal) * 0.1);
-  const totalStr = currencySymbol + grandTotalVal.toFixed(2);
+async function loadPosPaymentMethods() {
+  try {
+    const response = await fetch('/api/v1/settings/payment-methods');
+    const data = await response.json();
+    if (response.ok && Array.isArray(data.methods)) {
+      posPaymentMethods = data.methods.filter(method => method.enabled);
+    }
+  } catch {
+    // Keep the safe local display list; the server remains authoritative.
+  }
+  if (!posPaymentMethods.some(method => method.method === posPaymentRows[0]?.method)) {
+    posPaymentRows = [{ method: posPaymentMethods[0]?.method || 'CASH', amount: 0, reference: '' }];
+  }
+  renderPosPaymentRows();
+}
 
-  const actionFn = async () => {
-    try {
-      const res = await fetch('/api/sales/checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-          'x-user-role': 'cashier',
-          'x-user-id': '1'
-        },
-        body: JSON.stringify(payload)
-      });
+function setPosPaymentMode(mode) {
+  posPaymentMode = mode;
+  document.querySelectorAll('[data-payment-mode]').forEach(button => {
+    button.classList.toggle('active', button.dataset.paymentMode === mode);
+  });
+  const total = calculatePosInvoicePreview().total;
+  if (mode === 'single') posPaymentRows = [{ method: posPaymentRows[0]?.method || 'CASH', amount: total, reference: posPaymentRows[0]?.reference || '' }];
+  if (mode === 'split' && posPaymentRows.length < 2) {
+    const first = Math.floor(total * 50) / 100;
+    posPaymentRows = [
+      { method: posPaymentRows[0]?.method || 'CASH', amount: first, reference: posPaymentRows[0]?.reference || '' },
+      { method: nextAvailablePaymentMethod(posPaymentRows[0]?.method || 'CASH'), amount: Number((total - first).toFixed(2)), reference: '' }
+    ];
+  }
+  if (mode === 'partial') {
+    const partialAmount = Math.min(Number(posPaymentRows[0]?.amount || 0), total);
+    posPaymentRows = [{ method: posPaymentRows[0]?.method || 'CUSTOMER_CREDIT', amount: partialAmount || total, reference: posPaymentRows[0]?.reference || '' }];
+    ensurePosDueDate();
+  }
+  renderPosPaymentRows();
+}
 
-      if (!res.ok) {
-        throw new Error(`Server error: ${res.status}`);
-      }
+function addPosPaymentRow() {
+  if (posPaymentRows.length >= 10) return;
+  posPaymentMode = posPaymentMode === 'single' ? 'split' : posPaymentMode;
+  posPaymentRows.push({ method: nextAvailablePaymentMethod(), amount: 0, reference: '' });
+  renderPosPaymentRows();
+}
 
-      const data = await res.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Checkout failed');
-      }
-      clearCart();
-      await syncWithBackend();
-    } catch (err) {
-      console.warn("API checkout failed, using offline fallback:", err);
-      const mockInvoiceNo = 'INV-' + Date.now().toString().slice(-6);
-      sales.unshift({
-        id: Date.now(),
-        invoice_no: mockInvoiceNo,
-        customer_id: payload.customer_id,
-        user_id: 1,
-        subtotal,
-        discount: payload.discount,
-        tax_amount: (subtotal - (payload.discount || 0)) * 0.1,
-        total: grandTotalVal,
-        payment_method: payload.payment_method,
-        payment_status: 'completed',
-        sale_date: new Date()
-      });
-      cart.forEach(item => {
-        const prod = products.find(p => p.id === item.product_id);
-        if (prod) prod.stock = Math.max(0, prod.stock - item.quantity);
-      });
-      clearCart();
-      loadDashboardData();
-      loadPOSCatalog();
-      loadInventoryTable();
+function removePosPaymentRow(index) {
+  if (posPaymentRows.length === 1) return;
+  posPaymentRows.splice(index, 1);
+  renderPosPaymentRows();
+}
+
+function updatePosPaymentRow(index, field, value) {
+  if (!posPaymentRows[index]) return;
+  posPaymentRows[index][field] = field === 'amount' ? Number(value || 0) : value;
+  if (field === 'method' && value === 'CUSTOMER_CREDIT') {
+    posPaymentMode = 'partial';
+    ensurePosDueDate();
+  }
+  renderPosPaymentRows(false);
+}
+
+function renderPosPaymentRows(rebuild = true) {
+  const container = document.getElementById('posPaymentRows');
+  if (!container) return;
+  if (rebuild) {
+    const options = posPaymentMethods.map(method => `<option value="${escapeHtml(method.method)}">${escapeHtml(method.label)}</option>`).join('');
+    container.innerHTML = posPaymentRows.map((row, index) => {
+      const method = posPaymentMethods.find(item => item.method === row.method);
+      const referenceRequired = method?.requires_reference;
+      return `
+        <div class="payment-allocation-row">
+          <label>Method<select onchange="updatePosPaymentRow(${index}, 'method', this.value)">${options.replace(`value="${escapeHtml(row.method)}"`, `value="${escapeHtml(row.method)}" selected`)}</select></label>
+          <label>Amount<input type="number" min="0.01" step="0.01" value="${Number(row.amount || 0).toFixed(2)}" onchange="updatePosPaymentRow(${index}, 'amount', this.value)" ${posPaymentMode === 'single' ? 'readonly' : ''}></label>
+          <label class="payment-reference-field">Reference ${referenceRequired ? '<span aria-hidden="true">*</span>' : ''}<input value="${escapeHtml(row.reference || '')}" maxlength="200" placeholder="${referenceRequired ? 'Required' : 'Optional'}" oninput="posPaymentRows[${index}].reference = this.value"></label>
+          <button type="button" class="payment-allocation-remove" onclick="removePosPaymentRow(${index})" aria-label="Remove allocation" ${posPaymentRows.length === 1 ? 'disabled' : ''}><i class="fa-solid fa-xmark"></i></button>
+        </div>`;
+    }).join('');
+  }
+  syncPosPaymentAmounts(false);
+}
+
+function syncPosPaymentAmounts(updateRows = true) {
+  const preview = calculatePosInvoicePreview();
+  if (posPaymentMode === 'single' && posPaymentRows[0]) posPaymentRows[0].amount = preview.total;
+  if (updateRows) renderPosPaymentRows();
+  const collected = posPaymentRows
+    .filter(row => row.method !== 'CUSTOMER_CREDIT')
+    .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const remaining = Math.max(preview.total - collected, 0);
+  const collectedElement = document.getElementById('posCollectedTotal');
+  const remainingElement = document.getElementById('posRemainingTotal');
+  const dueWrap = document.getElementById('posDueDateWrap');
+  const addButton = document.getElementById('addPosPaymentBtn');
+  if (collectedElement) collectedElement.textContent = `${currencySymbol}${collected.toFixed(2)}`;
+  if (remainingElement) remainingElement.textContent = `${currencySymbol}${remaining.toFixed(2)}`;
+  if (dueWrap) dueWrap.hidden = posPaymentMode !== 'partial' && remaining <= 0 && !posPaymentRows.some(row => ['CHEQUE', 'OTHER', 'CUSTOMER_CREDIT'].includes(row.method));
+  if (addButton) addButton.hidden = posPaymentMode === 'single';
+}
+
+function nextAvailablePaymentMethod(excluded) {
+  const used = new Set(posPaymentRows.map(row => row.method));
+  if (excluded) used.add(excluded);
+  return posPaymentMethods.find(method => !used.has(method.method))?.method || posPaymentMethods[0]?.method || 'CASH';
+}
+
+function ensurePosDueDate() {
+  const input = document.getElementById('posDueDate');
+  if (input && !input.value) {
+    const date = new Date(Date.now() + 30 * 86400000);
+    input.value = date.toISOString().slice(0, 10);
+  }
+}
+
+function validatePosPaymentRows(total) {
+  const allocationTotal = posPaymentRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  if (posPaymentRows.some(row => Number(row.amount || 0) <= 0)) throw new Error('Every payment allocation must be greater than zero.');
+  if (allocationTotal > total + 0.001) throw new Error('Payment allocations cannot exceed the invoice total.');
+  if (posPaymentMode !== 'partial' && Math.abs(allocationTotal - total) > 0.001) {
+    throw new Error('Payment allocations must equal the invoice total. Choose Pay later / Partial to leave a balance.');
+  }
+  for (const row of posPaymentRows) {
+    const method = posPaymentMethods.find(item => item.method === row.method);
+    if (method?.requires_reference && !String(row.reference || '').trim() && row.method !== 'RAZORPAY') {
+      throw new Error(`${method.label} requires a reference.`);
+    }
+  }
+}
+
+async function submitPOSCheckout() {
+  if (!cart.length) {
+    showToast('Billing cart is empty.', 'error');
+    return;
+  }
+  const preview = calculatePosInvoicePreview();
+  try {
+    validatePosPaymentRows(preview.total);
+  } catch (error) {
+    showToast(error.message, 'error');
+    return;
+  }
+  const customerId = document.getElementById('cartCustomerSelect').value;
+  const hasOutstanding = posPaymentRows
+    .filter(row => !['CUSTOMER_CREDIT'].includes(row.method))
+    .reduce((sum, row) => sum + Number(row.amount || 0), 0) < preview.total - 0.001
+    || posPaymentRows.some(row => ['CHEQUE', 'OTHER', 'CUSTOMER_CREDIT'].includes(row.method));
+  if (hasOutstanding && !customerId) {
+    showToast('Select a customer for partial, pending, or pay-later checkout.', 'error');
+    return;
+  }
+  if (hasOutstanding) ensurePosDueDate();
+  const payload = {
+    customer_id: customerId ? Number(customerId) : null,
+    warehouse_id: Number(document.getElementById('cartWarehouseSelect').value),
+    items: cart.map(item => ({ product_id: item.product_id, quantity: item.quantity, unit_price: item.unit_price })),
+    discount: Number(document.getElementById('cartDiscount').value) || 0,
+    payments: posPaymentRows.map(row => ({
+      method: row.method,
+      amount: Number(row.amount),
+      reference: String(row.reference || '').trim() || undefined
+    })),
+    allow_partial_payment: hasOutstanding || posPaymentMode === 'partial',
+    due_date: hasOutstanding || posPaymentMode === 'partial' ? document.getElementById('posDueDate').value : undefined,
+    invoice_details: {
+      customer_gstin: document.getElementById('posCustomerGstin').value.trim() || undefined,
+      customer_address: document.getElementById('posCustomerAddress').value.trim() || undefined,
+      supply_state: document.getElementById('posSupplyState').value.trim() || undefined,
+      supply_state_code: document.getElementById('posSupplyStateCode').value.trim() || undefined,
+      customer_state: document.getElementById('posSupplyState').value.trim() || undefined,
+      customer_state_code: document.getElementById('posSupplyStateCode').value.trim() || undefined,
+      challan_number: document.getElementById('posChallanNumber').value.trim() || undefined,
+      transport: document.getElementById('posTransport').value.trim() || undefined,
+      vehicle_number: document.getElementById('posVehicleNumber').value.trim() || undefined,
+      eway_bill_number: document.getElementById('posEwayBill').value.trim() || undefined
     }
   };
+  const razorpayIndex = payload.payments.findIndex(payment => payment.method === 'RAZORPAY');
+  if (razorpayIndex >= 0) {
+    try {
+      const capture = await collectRazorpayAllocation(payload.payments[razorpayIndex].amount);
+      payload.payments[razorpayIndex].reference = capture.payment_id;
+      payload.payments[razorpayIndex].provider_transaction_id = capture.payment_id;
+    } catch (error) {
+      showToast(error.message || 'Razorpay is not configured.', 'error');
+      return;
+    }
+  }
+  await executeFinalCheckoutPayload(payload, preview.total);
+}
 
-  await executeAction(
-    btn, 
-    actionFn, 
-    "POS checkout completed successfully!", 
-    `Completed checkout of cart items for total of ${totalStr}`
-  );
+async function collectRazorpayAllocation(amount) {
+  const orderResponse = await fetch('/api/v1/payments/razorpay/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount, receipt: `pos-${Date.now()}` })
+  });
+  const orderData = await orderResponse.json();
+  if (!orderResponse.ok) throw new Error(orderData.error?.message || 'Razorpay is unavailable.');
+  await ensureRazorpayLoaded();
+  return new Promise((resolve, reject) => {
+    const checkout = new window.Razorpay({
+      key: orderData.key_id,
+      amount: orderData.order.amount,
+      currency: orderData.order.currency || 'INR',
+      name: 'Inventia POS Terminal',
+      description: `POS collection for ${cart.length} item(s)`,
+      order_id: orderData.order.id,
+      prefill: { name: document.getElementById('cartCustomerSearchInput').value || 'Walk-in Customer' },
+      theme: { color: getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim() },
+      handler: async response => {
+        try {
+          const verificationResponse = await fetch('/api/v1/payments/razorpay/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(response)
+          });
+          const verification = await verificationResponse.json();
+          if (!verificationResponse.ok || !verification.verified) {
+            throw new Error(verification.error?.message || 'Payment signature verification failed.');
+          }
+          resolve(verification);
+        } catch (error) {
+          reject(error);
+        }
+      },
+      modal: { ondismiss: () => reject(new Error('Razorpay checkout was cancelled.')) }
+    });
+    checkout.open();
+  });
+}
+
+async function executeFinalCheckoutPayload(payload, total) {
+  const button = document.querySelector('.checkout-btn');
+  const original = button?.innerHTML;
+  if (button) {
+    button.disabled = true;
+    button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Completing sale…';
+  }
+  try {
+    const response = await fetch('/api/v1/pos/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error?.message || data.message || 'Checkout failed.');
+    }
+    clearCart();
+    showCheckoutResult(data);
+    showToast(`Invoice ${data.invoiceNumber} created.`, 'success');
+    addSystemNotification(`Created ${data.invoiceNumber} for ${currencySymbol}${Number(total).toFixed(2)}`);
+    await syncWithBackend();
+  } catch (error) {
+    showToast(error.message || 'Checkout failed. No business data changed.', 'error');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = original;
+    }
+  }
+}
+
+function showCheckoutResult(data) {
+  const card = document.getElementById('posCheckoutResult');
+  if (!card) return;
+  const payment = data.paymentSummary || data.payment_summary || {};
+  const pdf = data.pdf || {};
+  card.hidden = false;
+  card.innerHTML = `
+    <h4><i class="fa-solid fa-circle-check"></i> ${escapeHtml(data.invoiceNumber)} completed</h4>
+    <p>Payment status: <strong>${escapeHtml(data.paymentStatus)}</strong></p>
+    <p>Outstanding: <strong>${currencySymbol}${Number(payment.outstanding || 0).toFixed(2)}</strong></p>
+    <p>PDF: <strong>${escapeHtml(pdf.status || 'PENDING')}</strong>${pdf.error ? ` · ${escapeHtml(pdf.error)}` : ''}</p>
+    <div class="checkout-result-actions">
+      ${pdf.status === 'READY' ? `<button class="action-btn primary compact" onclick="downloadInvoicePdf(${Number(data.invoiceId)})"><i class="fa-solid fa-download"></i> Download PDF</button>` : `<button class="action-btn secondary compact" onclick="retryInvoicePdf(${Number(data.invoiceId)})"><i class="fa-solid fa-rotate"></i> Retry PDF</button>`}
+      <button class="action-btn secondary compact" onclick="openInvoiceDetail(${Number(data.invoiceId)})"><i class="fa-solid fa-eye"></i> View invoice</button>
+    </div>`;
+}
+
+function scheduleInvoiceSearch() {
+  clearTimeout(invoiceSearchTimer);
+  invoiceSearchTimer = setTimeout(loadInvoices, 250);
+}
+
+async function loadInvoices() {
+  const table = document.getElementById('invoicesTable');
+  if (!table) return;
+  const params = new URLSearchParams();
+  const search = document.getElementById('invoiceSearch')?.value.trim();
+  const from = document.getElementById('invoiceDateFrom')?.value;
+  const to = document.getElementById('invoiceDateTo')?.value;
+  const status = document.getElementById('invoicePaymentStatus')?.value;
+  if (search) params.set('q', search);
+  if (from) params.set('date_from', from);
+  if (to) params.set('date_to', to);
+  if (status) params.set('payment_status', status);
+  table.innerHTML = '<tr><td colspan="9"><i class="fa-solid fa-spinner fa-spin"></i> Loading invoices…</td></tr>';
+  try {
+    const response = await fetch(`/api/v1/invoices?${params}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Invoices could not be loaded.');
+    const invoices = data.invoices || [];
+    if (!invoices.length) {
+      table.innerHTML = '<tr><td colspan="9">No invoices match these filters.</td></tr>';
+      return;
+    }
+    table.innerHTML = invoices.map(invoice => {
+      const statusClass = invoice.payment_status === 'PAID'
+        ? 'completed'
+        : invoice.payment_status.includes('REFUND') ? 'cancelled' : 'pending';
+      const pdfClass = invoice.pdf_status === 'READY' ? 'completed' : invoice.pdf_status === 'FAILED' ? 'cancelled' : 'pending';
+      return `<tr>
+        <td><strong>${escapeHtml(invoice.invoice_number)}</strong></td>
+        <td>${escapeHtml(invoice.customer_name || 'Walk-in Customer')}</td>
+        <td>${new Date(invoice.issued_at).toLocaleDateString()}</td>
+        <td>${currencySymbol}${Number(invoice.grand_total || 0).toFixed(2)}</td>
+        <td>${currencySymbol}${Number(invoice.collected || 0).toFixed(2)}</td>
+        <td>${currencySymbol}${Number(invoice.outstanding || 0).toFixed(2)}</td>
+        <td><span class="status-badge ${statusClass}">${escapeHtml(invoice.payment_status.replaceAll('_', ' '))}</span></td>
+        <td><span class="status-badge ${pdfClass}">${escapeHtml(invoice.pdf_status)}</span></td>
+        <td><div class="invoice-row-actions">
+          <button class="action-btn secondary compact" onclick="openInvoiceDetail(${Number(invoice.id)})"><i class="fa-solid fa-eye"></i></button>
+          ${invoice.pdf_status === 'READY'
+            ? `<button class="action-btn secondary compact" onclick="downloadInvoicePdf(${Number(invoice.id)})"><i class="fa-solid fa-download"></i></button>`
+            : `<button class="action-btn secondary compact" onclick="retryInvoicePdf(${Number(invoice.id)})"><i class="fa-solid fa-rotate"></i></button>`}
+          ${Number(invoice.outstanding || 0) > 0 ? `<button class="action-btn primary compact" onclick="openInvoiceCollection(${Number(invoice.id)}, ${Number(invoice.outstanding || 0)})">Collect</button>` : ''}
+        </div></td>
+      </tr>`;
+    }).join('');
+  } catch (error) {
+    table.innerHTML = `<tr><td colspan="9">${escapeHtml(error.message)}</td></tr>`;
+    showToast(error.message, 'error');
+  }
+}
+
+async function openInvoiceDetail(invoiceId) {
+  const modal = document.getElementById('invoiceDetailModal');
+  const body = document.getElementById('invoiceDetailBody');
+  const footer = document.getElementById('invoiceDetailFooter');
+  if (!modal || !body || !footer) return;
+  modal.style.display = 'grid';
+  body.innerHTML = '<p><i class="fa-solid fa-spinner fa-spin"></i> Loading invoice…</p>';
+  footer.innerHTML = '';
+  try {
+    const response = await fetch(`/api/v1/invoices/${invoiceId}`);
+    const invoice = await response.json();
+    if (!response.ok) throw new Error(invoice.error?.message || 'Invoice could not be loaded.');
+    activeInvoiceDetail = invoice;
+    document.getElementById('invoiceDetailTitle').textContent = invoice.invoice_number;
+    const seller = invoice.seller_snapshot || {};
+    const customer = invoice.customer_snapshot || {};
+    const summary = invoice.payment_summary || {};
+    body.innerHTML = `
+      <div class="invoice-detail-summary">
+        ${invoiceSummaryCard('Grand total', summary.total)}
+        ${invoiceSummaryCard('Net received', summary.net_collected)}
+        ${invoiceSummaryCard('Outstanding', summary.outstanding)}
+        ${invoiceSummaryCard('Payment status', invoice.payment_status, false)}
+      </div>
+      <div class="invoice-party-grid">
+        <div class="invoice-party-card"><h4>${escapeHtml(seller.name || 'Organization')}</h4><p>${escapeHtml(seller.address || '')}</p><p>GSTIN: ${escapeHtml(seller.gstin || '—')}</p><p>State: ${escapeHtml(seller.state || '—')} (${escapeHtml(seller.state_code || '—')})</p></div>
+        <div class="invoice-party-card"><h4>${escapeHtml(customer.name || 'Walk-in Customer')}</h4><p>${escapeHtml(customer.address || '')}</p><p>GSTIN: ${escapeHtml(customer.gstin || 'URP')}</p><p>Due: ${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : '—'}</p></div>
+      </div>
+      <h4>Invoice items</h4>
+      <div class="table-container"><table><thead><tr><th>Item</th><th>HSN/SAC</th><th>Qty</th><th>Rate</th><th>Taxable</th><th>GST</th><th>Total</th></tr></thead><tbody>
+        ${invoice.items.map(item => `<tr><td>${escapeHtml(item.description)}</td><td>${escapeHtml(item.hsn_sac || '—')}</td><td>${escapeHtml(item.quantity)} ${escapeHtml(item.unit)}</td><td>${formatMinorCurrency(item.rate_minor)}</td><td>${formatMinorCurrency(item.taxable_minor)}</td><td>${escapeHtml(item.gst_rate)}%</td><td>${formatMinorCurrency(item.line_total_minor)}</td></tr>`).join('')}
+      </tbody></table></div>
+      <h4 style="margin-top:16px;">Collection history</h4>
+      <div class="table-container"><table><thead><tr><th>Payment</th><th>Method</th><th>Reference</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+        ${invoice.allocations.length ? invoice.allocations.map(allocation => `<tr>
+          <td>${escapeHtml(allocation.payment_number || '—')}</td><td>${escapeHtml(allocation.method.replaceAll('_', ' '))}</td>
+          <td>${escapeHtml(allocation.reference_number || '—')}</td><td>${formatMinorCurrency(allocation.amount_minor)}</td>
+          <td><span class="status-badge ${allocation.status === 'SUCCESS' ? 'completed' : 'pending'}">${escapeHtml(allocation.status)}</span></td>
+          <td><div class="invoice-row-actions">
+            ${allocation.status === 'PENDING' && ['CHEQUE', 'OTHER'].includes(allocation.method) ? `<button class="action-btn secondary compact" onclick="confirmInvoiceAllocation(${Number(allocation.id)})">Confirm</button>` : ''}
+            ${allocation.status === 'SUCCESS' && allocation.method !== 'RAZORPAY' ? `<button class="action-btn secondary compact" onclick="refundInvoiceAllocation(${Number(allocation.id)}, ${Number(allocation.amount_minor) / 100})">Refund</button>` : ''}
+          </div></td>
+        </tr>`).join('') : '<tr><td colspan="6">No collection recorded.</td></tr>'}
+      </tbody></table></div>`;
+    footer.innerHTML = `
+      ${summary.outstanding > 0 ? `<button class="action-btn primary" onclick="openInvoiceCollection(${Number(invoice.id)}, ${Number(summary.outstanding)})">Collect outstanding</button>` : ''}
+      ${invoice.pdf_status === 'READY'
+        ? `<button class="action-btn secondary" onclick="downloadInvoicePdf(${Number(invoice.id)})"><i class="fa-solid fa-download"></i> Download PDF</button>`
+        : `<button class="action-btn secondary" onclick="retryInvoicePdf(${Number(invoice.id)})"><i class="fa-solid fa-rotate"></i> Retry PDF</button>`}
+      <button class="action-btn secondary" onclick="closeModal('invoiceDetailModal')">Close</button>`;
+  } catch (error) {
+    body.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function invoiceSummaryCard(label, value, currency = true) {
+  const display = currency ? `${currencySymbol}${Number(value || 0).toFixed(2)}` : escapeHtml(value || '—');
+  return `<div class="kpi-card"><span class="kpi-label">${escapeHtml(label)}</span><h3 class="kpi-value">${display}</h3></div>`;
+}
+
+function formatMinorCurrency(value) {
+  return `${currencySymbol}${(Number(value || 0) / 100).toFixed(2)}`;
+}
+
+async function downloadInvoicePdf(invoiceId) {
+  try {
+    const response = await fetch(`/api/v1/invoices/${invoiceId}/pdf`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Invoice PDF is not ready.');
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeInvoiceDetail?.id === invoiceId ? activeInvoiceDetail.invoice_number : `invoice-${invoiceId}`}.pdf`;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function retryInvoicePdf(invoiceId) {
+  try {
+    const response = await fetch(`/api/v1/invoices/${invoiceId}/pdf/retry`, { method: 'POST' });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'PDF retry failed.');
+    showToast(data.pdf?.status === 'READY' ? 'Invoice PDF is ready.' : 'PDF retry was queued.', data.pdf?.status === 'READY' ? 'success' : 'info');
+    await loadInvoices();
+    if (activeInvoiceDetail?.id === invoiceId) await openInvoiceDetail(invoiceId);
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+function openInvoiceCollection(invoiceId, outstanding) {
+  const modal = document.getElementById('invoiceCollectionModal');
+  document.getElementById('collectionInvoiceId').value = invoiceId;
+  document.getElementById('collectionOutstanding').value = `${currencySymbol}${Number(outstanding).toFixed(2)}`;
+  document.getElementById('collectionAmount').value = Number(outstanding).toFixed(2);
+  const select = document.getElementById('collectionMethod');
+  select.innerHTML = posPaymentMethods
+    .filter(method => !['CUSTOMER_CREDIT', 'RAZORPAY', 'STORE_CREDIT'].includes(method.method))
+    .map(method => `<option value="${escapeHtml(method.method)}">${escapeHtml(method.label)}</option>`)
+    .join('');
+  updateCollectionReferenceState();
+  modal.style.display = 'grid';
+}
+
+function updateCollectionReferenceState() {
+  const method = document.getElementById('collectionMethod')?.value;
+  const setting = posPaymentMethods.find(item => item.method === method);
+  const input = document.getElementById('collectionReference');
+  if (!input) return;
+  input.required = Boolean(setting?.requires_reference);
+  input.placeholder = setting?.requires_reference ? 'Required' : 'Optional';
+}
+
+async function submitInvoiceCollection(event) {
+  event.preventDefault();
+  const invoiceId = Number(document.getElementById('collectionInvoiceId').value);
+  const method = document.getElementById('collectionMethod').value;
+  const payload = {
+    payments: [{
+      method,
+      amount: Number(document.getElementById('collectionAmount').value),
+      reference: document.getElementById('collectionReference').value.trim() || undefined
+    }],
+    allow_partial_payment: false
+  };
+  try {
+    const response = await fetch(`/api/v1/invoices/${invoiceId}/payments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Collection could not be recorded.');
+    closeModal('invoiceCollectionModal');
+    showToast('Collection recorded.', 'success');
+    await loadInvoices();
+    await openInvoiceDetail(invoiceId);
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function confirmInvoiceAllocation(allocationId) {
+  try {
+    const response = await fetch(`/api/v1/payment-allocations/${allocationId}/confirm`, { method: 'POST' });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Payment could not be confirmed.');
+    showToast('Pending payment confirmed.', 'success');
+    await loadInvoices();
+    if (activeInvoiceDetail) await openInvoiceDetail(activeInvoiceDetail.id);
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function refundInvoiceAllocation(allocationId, maximum) {
+  const amount = window.prompt(`Refund amount (maximum ${maximum.toFixed(2)})`, maximum.toFixed(2));
+  if (amount == null) return;
+  const reason = window.prompt('Refund reason');
+  if (!reason) return;
+  try {
+    const response = await fetch(`/api/v1/payment-allocations/${allocationId}/refunds`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: Number(amount), reason })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Refund could not be recorded.');
+    showToast('Refund recorded.', 'success');
+    await loadInvoices();
+    if (activeInvoiceDetail) await openInvoiceDetail(activeInvoiceDetail.id);
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
 }
 
 // ================= TILE & AREA CALCULATOR =================
 function toggleCalculatorModal() {
   const modal = document.getElementById('calculatorModal');
   modal.classList.toggle('active');
-  
+
   // Set target tile product (default to Carrara Tile)
   activeCalculatorProduct = products.find(p => p.uom === 'box') || products[0];
   if (activeCalculatorProduct && activeCalculatorProduct.coverage_per_box) {
@@ -1894,6 +2800,9 @@ function loadInventoryTable() {
         <span class="stock-pill ${(p.stock || 0) < p.min_stock_alert ? 'low' : 'ok'}">${p.stock || 0} ${p.uom}s</span>
       </td>
       <td>
+        <button class="action-btn-sm" onclick="openBarcodeModal(${p.id})" title="View and print barcode">
+          <i class="fa-solid fa-barcode"></i> ${p.barcode ? 'Print' : 'Assign'}
+        </button>
         <button class="action-btn-sm" style="background:#fef2f2; border:1px solid #fee2e2; color:#dc2626; padding: 6px 10px; border-radius: 4px; font-weight:700; cursor:pointer;" onclick="deleteProduct(${p.id})">
           <i class="fa-solid fa-trash-can"></i> Delete
         </button>
@@ -1912,22 +2821,13 @@ async function deleteProduct(productId) {
   const pName = p ? p.name : 'Product';
 
   const actionFn = async () => {
-    const res = await fetch(`/api/inventory/products/${productId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || 'mock-token'}`,
-        'x-user-role': localStorage.getItem('role') || 'admin'
-      }
-    });
+    const res = await fetch(`/api/v1/products/${productId}`, { method: 'DELETE' });
 
     if (!res.ok) {
       throw new Error(`Server error: ${res.status}`);
     }
 
-    const data = await res.json();
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to delete product');
-    }
+    await res.json();
     await syncWithBackend();
   };
 
@@ -1952,6 +2852,15 @@ function toggleBoxCoverageField() {
   }
 }
 
+function toggleProductBarcodeFields() {
+  const auto = document.getElementById('pAutoBarcode')?.checked !== false;
+  const input = document.getElementById('pBarcode');
+  if (!input) return;
+  input.disabled = auto;
+  input.placeholder = auto ? 'Organization sequence will be used' : 'Enter a valid persistent barcode';
+  if (auto) input.value = '';
+}
+
 async function submitNewProduct(event) {
   event.preventDefault();
 
@@ -1969,7 +2878,6 @@ async function submitNewProduct(event) {
   }
   
   const payload = {
-    id: products.length + 1,
     name: document.getElementById('pName').value,
     sku: document.getElementById('pSku').value,
     brand_id: parseInt(document.getElementById('pBrand').value),
@@ -1984,22 +2892,33 @@ async function submitNewProduct(event) {
     shade_lot_number: document.getElementById('pLot').value,
     image_url: imageUrl,
     min_stock_alert: 5,
-    stock: 0
+    stock: 0,
+    barcode: document.getElementById('pAutoBarcode')?.checked
+      ? null
+      : (document.getElementById('pBarcode')?.value.trim() || null),
+    barcode_type: document.getElementById('pBarcodeType')?.value || 'CODE128'
   };
 
-  // Add locally
-  products.push(payload);
-  loadInventoryTable();
-  loadPOSCatalog();
-  closeProductModal();
-  document.getElementById('productForm').reset();
-  
-  // Call backend API in background
-  fetch('/api/inventory/products', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer mock', 'x-user-role': 'admin' },
-    body: JSON.stringify(payload)
-  }).catch(e => console.log('Offline demo saved product locally.'));
+  try {
+    const response = await fetch('/api/v1/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Product creation failed.');
+    closeProductModal();
+    document.getElementById('productForm').reset();
+    await loadEnterpriseWorkspaces();
+    loadInventoryTable();
+    loadPOSCatalog();
+    showToast(data.barcode
+      ? `Product created with barcode ${data.barcode}.`
+      : 'Product created; barcode assignment is pending retry.', data.barcode ? 'success' : 'info');
+    if (data.barcode) openBarcodeModal(Number(data.id));
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
 }
 
 // Base64 File Helper
@@ -2204,40 +3123,31 @@ async function submitStockAdjustment(event) {
   const reason = document.getElementById('adjReason').value;
   const notes = document.getElementById('adjNotes').value;
 
-  const product = products.find(p => p.id === pId);
-  if (product) {
-    product.stock = (product.stock || 0) + qty;
-    alert(`Stock adjusted successfully! New stock level: ${product.stock} ${product.uom}s`);
-    
-    // Add to transfers log for simulation demonstration
-    transfers.unshift({
-      id: transfers.length + 1,
-      from: qty > 0 ? 'Supplier Delivery' : 'Inventory Adjust',
-      to: wId === 1 ? 'Main Warehouse' : wId === 2 ? 'City Showroom' : 'Transit Dock',
-      product: product.name,
-      qty: Math.abs(qty),
-      status: 'completed'
+  try {
+    const response = await fetch('/api/v1/inventory/adjustments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        product_id: pId,
+        warehouse_id: wId,
+        quantity: Math.abs(qty),
+        direction: qty >= 0 ? 'increase' : 'decrease',
+        reason,
+        notes
+      })
     });
-
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Stock adjustment failed.');
     closeStockInwardModal();
     document.getElementById('stockInwardForm').reset();
-    
+    await loadEnterpriseWorkspaces();
     loadInventoryTable();
     loadPOSCatalog();
     loadDashboardData();
     loadTransferLogs();
-
-    // POST to backend API
-    fetch('/api/inventory/stock/adjust', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-        'x-user-role': 'manager',
-        'x-user-id': '1'
-      },
-      body: JSON.stringify({ product_id: pId, warehouse_id: wId, quantity_change: qty, reason, notes })
-    }).catch(e => console.log('Offline demo updated stock locally.'));
+    showToast('Stock adjustment posted to the movement ledger.', 'success');
+  } catch (error) {
+    showToast(error.message, 'error');
   }
 }
 
@@ -2421,31 +3331,24 @@ async function submitNewBrand(event) {
   const payload = { name, code };
 
   try {
-    const res = await fetch('/api/inventory/brands', {
+    const res = await fetch('/api/v1/reference/brands', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-        'x-user-role': 'manager'
       },
       body: JSON.stringify(payload)
     });
 
     if (!res.ok) {
       const err = await res.json();
-      throw new Error(err.error || 'Server error');
+      throw new Error(err.error?.message || 'Server error');
     }
 
     alert('Brand added successfully!');
     document.getElementById('brandForm').reset();
     await syncWithBackend();
   } catch (err) {
-    console.error('Brand API failed, using fallback:', err);
-    alert('[Offline Demo] Brand added successfully (simulated).');
-    brands.push({ id: brands.length + 1, name, code });
-    document.getElementById('brandForm').reset();
-    loadBrandsAndCategories();
-    populateDropdowns();
+    showToast(err.message, 'error');
   }
 }
 
@@ -2458,31 +3361,24 @@ async function submitNewCategory(event) {
   const payload = { name, parent_id: parentId };
 
   try {
-    const res = await fetch('/api/inventory/categories', {
+    const res = await fetch('/api/v1/reference/categories', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-        'x-user-role': 'manager'
       },
       body: JSON.stringify(payload)
     });
 
     if (!res.ok) {
       const err = await res.json();
-      throw new Error(err.error || 'Server error');
+      throw new Error(err.error?.message || 'Server error');
     }
 
     alert('Category added successfully!');
     document.getElementById('categoryForm').reset();
     await syncWithBackend();
   } catch (err) {
-    console.error('Category API failed, using fallback:', err);
-    alert('[Offline Demo] Category added successfully (simulated).');
-    categories.push({ id: categories.length + 1, name, parent_id: parentId });
-    document.getElementById('categoryForm').reset();
-    loadBrandsAndCategories();
-    populateDropdowns();
+    showToast(err.message, 'error');
   }
 }
 
@@ -2568,10 +3464,7 @@ async function toggleUserStatus(userId, currentStatus) {
       alert(`Staff account status updated!`);
       await syncWithBackend();
     } catch (err) {
-      console.error('Toggle status API failed, using fallback:', err);
-      member.status = newStatus;
-      alert(`Staff account status updated (simulated)!`);
-      loadStaffList();
+      showToast(err.message || 'Staff status was not changed.', 'error');
     }
   }
 }
@@ -2994,20 +3887,7 @@ async function submitNewCategoryModal(event) {
     closeCategoryModal();
     await syncWithBackend();
   } catch (err) {
-    console.error('Modal category creation API failed, using fallback:', err);
-    alert('[Offline Demo] Category created successfully (simulated).');
-    const newCat = {
-      id: categories.length + 1,
-      name: name,
-      description: description,
-      created_at: new Date(),
-      updated_at: new Date()
-    };
-    categories.push(newCat);
-    document.getElementById('categoryModalForm').reset();
-    closeCategoryModal();
-    loadCategoryManagement();
-    loadBrandsAndCategories();
+    showToast(err.message || 'Category was not created.', 'error');
   }
 }
 
@@ -3107,24 +3987,31 @@ async function openBarcodeModal(productId) {
   if (product) {
     document.getElementById('barcodeProductTitle').innerText = product.name;
     const image = document.getElementById('barcodeImage');
-    image.removeAttribute('data-document-id');
-    image.removeAttribute('data-download-url');
+    if (image.dataset.objectUrl) URL.revokeObjectURL(image.dataset.objectUrl);
+    image.removeAttribute('data-assignment-id');
     document.getElementById('barcodeModal').classList.add('active');
     try {
-      const response = await fetch('/api/barcodes/generate', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          value: product.barcode || product.sku,
-          format: 'code128',
-          product_id: product.id
-        })
-      });
-      const generated = await response.json();
-      if (!response.ok) throw new Error(generated.error || 'Barcode generation failed.');
-      image.src = generated.data_url;
-      image.dataset.documentId = generated.id;
-      image.dataset.downloadUrl = generated.download_url;
+      let response = await fetch(`/api/v1/barcodes/products?q=${encodeURIComponent(product.sku)}&limit=20`);
+      let data = await response.json();
+      if (!response.ok) throw new Error(data.error?.message || 'Barcode could not be loaded.');
+      let record = (data.products || []).find(item => Number(item.product_id) === Number(product.id));
+      if (!record?.assignment_id) {
+        response = await fetch('/api/v1/barcodes/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product_ids: [product.id] })
+        });
+        data = await response.json();
+        if (!response.ok) throw new Error(data.error?.message || 'Barcode assignment failed.');
+        record = { assignment_id: data.assignments?.[0]?.id };
+      }
+      if (!record?.assignment_id) throw new Error('Barcode assignment is pending retry.');
+      const imageResponse = await fetch(`/api/v1/barcodes/${record.assignment_id}/render?format=png`);
+      if (!imageResponse.ok) throw new Error('Barcode image generation failed.');
+      const objectUrl = URL.createObjectURL(await imageResponse.blob());
+      image.src = objectUrl;
+      image.dataset.objectUrl = objectUrl;
+      image.dataset.assignmentId = record.assignment_id;
     } catch (error) {
       showToast(error.message, 'error');
     }
@@ -3132,13 +4019,18 @@ async function openBarcodeModal(productId) {
 }
 
 function closeBarcodeModal() {
+  const image = document.getElementById('barcodeImage');
+  if (image?.dataset.objectUrl) {
+    URL.revokeObjectURL(image.dataset.objectUrl);
+    delete image.dataset.objectUrl;
+  }
   document.getElementById('barcodeModal').classList.remove('active');
 }
 
 async function downloadCurrentBarcode() {
   const image = document.getElementById('barcodeImage');
-  if (!image?.dataset.downloadUrl) return showToast('Generate the barcode first.', 'info');
-  const response = await fetch(image.dataset.downloadUrl, { headers: getAuthHeaders() });
+  if (!image?.dataset.assignmentId) return showToast('Generate the barcode first.', 'info');
+  const response = await fetch(`/api/v1/barcodes/${image.dataset.assignmentId}/render?format=png&download=1`);
   if (!response.ok) return showToast('Unable to download this barcode.', 'error');
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
@@ -3151,15 +4043,931 @@ async function downloadCurrentBarcode() {
 
 async function printCurrentBarcode() {
   const image = document.getElementById('barcodeImage');
-  if (!image?.dataset.documentId) return showToast('Generate the barcode first.', 'info');
-  const response = await fetch('/api/barcodes/print', {
+  if (!image?.dataset.assignmentId) return showToast('Generate the barcode first.', 'info');
+  const response = await fetch('/api/v1/barcode-print-jobs', {
     method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ document_file_id: image.dataset.documentId, copies: 1, paper_size: '40x20', printer: 'browser' })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      output_type: 'PDF',
+      printer_type: 'browser',
+      copies: 1,
+      starting_position: 1,
+      items: [{ assignment_id: Number(image.dataset.assignmentId), quantity: 1 }]
+    })
   });
-  if (!response.ok) return showToast('Unable to create the print job.', 'error');
-  window.print();
+  const job = await response.json();
+  if (!response.ok) return showToast(job.error?.message || 'Unable to create the print job.', 'error');
+  if (job.status !== 'COMPLETED') return showToast(job.error_message || 'Print output is queued for retry.', 'info');
+  await downloadBarcodePrintJob(job.id, true);
 }
+
+// ================= BARCODE & LABEL CENTER =================
+async function barcodeApi(path, options = {}) {
+  const response = await fetch(`/api/v1${path}`, options);
+  const contentType = response.headers.get('content-type') || '';
+  const payload = contentType.includes('application/json') ? await response.json() : await response.blob();
+  if (!response.ok) {
+    const error = new Error(payload?.error?.message || payload?.message || 'Barcode operation failed.');
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+  return payload;
+}
+
+async function loadBarcodeWorkspace() {
+  try {
+    await Promise.all([
+      loadBarcodeOverview(),
+      loadBarcodeProducts(),
+      loadBarcodeTemplates(),
+      loadBarcodeSettings()
+    ]);
+    await loadBarcodeViewData(activeBarcodeView);
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function openBarcodeWorkspaceView(view = 'overview', button = null, { syncHistory = true, replaceHistory = false } = {}) {
+  if (!BARCODE_VIEW_ROUTES[view]) view = 'overview';
+  if (currentTab !== 'barcodes') switchTab('barcodes');
+  activeBarcodeView = view;
+  document.querySelectorAll('.barcode-panel').forEach(panel => panel.classList.remove('active'));
+  document.querySelectorAll('.barcode-view-tabs button').forEach(tab => tab.classList.remove('active'));
+  document.querySelectorAll('#dropdownBarcodes .nav-dropdown-item').forEach(item => {
+    item.classList.toggle('active', item.dataset.barcodeView === view);
+  });
+  document.getElementById('dropdownBarcodes')?.classList.add('open');
+  const panel = document.getElementById(`barcodePanel${view.charAt(0).toUpperCase()}${view.slice(1)}`);
+  const targetButton = button || document.querySelector(`.barcode-view-tabs [data-barcode-panel="${view}"]`);
+  panel?.classList.add('active');
+  targetButton?.classList.add('active');
+  if (syncHistory) syncBarcodeClientRoute(view, { replace: replaceHistory });
+  await loadBarcodeViewData(view).catch(error => showToast(error.message, 'error'));
+  if (view === 'scanner') setTimeout(() => document.getElementById('barcodeWorkspaceScanInput')?.focus(), 60);
+}
+
+async function loadBarcodeViewData(view) {
+  if (view === 'overview') return loadBarcodeOverview();
+  if (view === 'products' || view === 'generate' || view === 'batch') return loadBarcodeProducts();
+  if (view === 'designer') {
+    await loadBarcodeTemplates();
+    return renderBarcodeDesignerPreview();
+  }
+  if (view === 'scanner') return loadBarcodeScanHistory();
+  if (view === 'queue' || view === 'history') return loadBarcodePrintJobs(view);
+  if (view === 'analytics') return loadBarcodeAnalytics();
+  if (view === 'recommendations') return loadBarcodeRecommendations();
+  if (view === 'settings') return loadBarcodeSettings();
+}
+
+async function loadBarcodeOverview() {
+  const data = await barcodeApi('/barcodes/overview');
+  const kpis = data.kpis || {};
+  const cards = [
+    ['Total Products', kpis.total_products, 'fa-boxes-stacked', 'Active catalog records'],
+    ['With Barcode', kpis.products_with_barcode, 'fa-barcode', 'Persistent identities'],
+    ['Without Barcode', kpis.products_without_barcode, 'fa-triangle-exclamation', 'Needs assignment'],
+    ['Variant Barcodes', kpis.variant_barcodes, 'fa-tags', 'Exact variant mappings'],
+    ['Printed Today', kpis.labels_printed_today, 'fa-print', 'Physical labels'],
+    ['Failed Jobs', kpis.failed_print_jobs, 'fa-circle-xmark', 'Safe to retry'],
+    ['Queued Jobs', kpis.queued_print_jobs, 'fa-list-check', 'Pending output'],
+    ['Scanner', kpis.scanner_status, 'fa-expand', `${kpis.scans_today || 0} scans today`]
+  ];
+  const container = document.getElementById('barcodeKpis');
+  if (container) container.innerHTML = cards.map(([label, value, icon, note]) => `
+    <article class="kpi-card">
+      <div class="barcode-kpi-card-top"><span class="kpi-label">${escapeHtml(label)}</span><i class="fa-solid ${icon}"></i></div>
+      <h3 class="kpi-value">${escapeHtml(value ?? 0)}</h3>
+      <span class="kpi-subtext">${escapeHtml(note)}</span>
+    </article>`).join('');
+  renderBarcodeActivityList('barcodeRecentAssignments', data.recent_assignments, item => ({
+    title: item.product_name,
+    subtitle: `${item.variant_name ? `${item.variant_name} · ` : ''}${item.barcode_value} · ${item.barcode_type}`,
+    trailing: formatBarcodeDate(item.assigned_at)
+  }));
+  renderBarcodeActivityList('barcodeRecentJobs', data.recent_print_jobs, item => ({
+    title: item.job_number,
+    subtitle: `${item.template_name} · ${item.label_count} labels`,
+    trailing: barcodeStatusBadge(item.status)
+  }));
+  renderBarcodeActivityList('barcodeMissingProducts', data.missing_products, item => ({
+    title: item.name,
+    subtitle: item.sku,
+    trailing: '<span class="status-badge pending">Missing</span>'
+  }));
+  return data;
+}
+
+function renderBarcodeActivityList(id, items = [], mapper) {
+  const container = document.getElementById(id);
+  if (!container) return;
+  if (!items.length) {
+    container.innerHTML = '<div class="barcode-empty-state">No records to show.</div>';
+    return;
+  }
+  container.innerHTML = items.map(item => {
+    const mapped = mapper(item);
+    return `<div class="barcode-activity-item"><div><strong>${escapeHtml(mapped.title || '')}</strong><span>${escapeHtml(mapped.subtitle || '')}</span></div><div>${mapped.trailing || ''}</div></div>`;
+  }).join('');
+}
+
+function scheduleBarcodeProductSearch() {
+  clearTimeout(barcodeProductSearchTimer);
+  barcodeProductSearchTimer = setTimeout(() => loadBarcodeProducts(), 250);
+}
+
+async function loadBarcodeProducts() {
+  const query = new URLSearchParams({ limit: '500' });
+  const search = document.getElementById('barcodeProductSearch')?.value.trim();
+  const status = document.getElementById('barcodeStatusFilter')?.value;
+  const type = document.getElementById('barcodeTypeFilter')?.value;
+  if (search) query.set('q', search);
+  if (status) query.set('status', status);
+  if (type) query.set('type', type);
+  const data = await barcodeApi(`/barcodes/products?${query}`);
+  barcodeProducts = data.products || [];
+  renderBarcodeProductsTable();
+  populateBarcodeProductSelector();
+  updateBarcodeSelectionState();
+  renderBarcodeAssignmentPreview();
+  renderBarcodeSheetPreview();
+  return barcodeProducts;
+}
+
+function renderBarcodeProductsTable() {
+  const body = document.getElementById('barcodeProductsTable');
+  if (!body) return;
+  if (!barcodeProducts.length) {
+    body.innerHTML = '<tr><td colspan="10" class="barcode-empty-state">No products match these barcode filters.</td></tr>';
+    return;
+  }
+  body.innerHTML = barcodeProducts.map(item => {
+    const selected = item.assignment_id && selectedBarcodeAssignments.has(Number(item.assignment_id));
+    const batch = item.batch_no || '—';
+    const expiry = item.expires_at ? String(item.expires_at).slice(0, 10) : '—';
+    return `<tr>
+      <td><input type="checkbox" ${selected ? 'checked' : ''} ${item.assignment_id ? '' : 'disabled'} onchange="toggleBarcodeSelection(${Number(item.assignment_id || 0)}, this.checked)"></td>
+      <td><div class="barcode-product-identity">${item.image_url ? `<img src="${escapeHtml(resolveProductImage(item.image_url, item.product_name))}" alt="">` : `<span class="barcode-product-avatar">${escapeHtml(getInitials(item.product_name))}</span>`}<div><strong>${escapeHtml(item.product_name)}</strong><small>${escapeHtml(item.sku)}</small></div></div></td>
+      <td>${item.barcode_value ? `<code>${escapeHtml(item.barcode_value)}</code>` : '—'}</td>
+      <td>${escapeHtml(item.barcode_type || '—')}</td>
+      <td>${escapeHtml(item.category_name || 'Uncategorized')}</td>
+      <td>${Number(item.warehouse_stock || 0).toLocaleString()} ${escapeHtml(item.uom || '')}</td>
+      <td>${escapeHtml(batch)}<br><small>${escapeHtml(expiry)}</small></td>
+      <td>${currencySymbol}${Number(item.selling_price || 0).toFixed(2)}</td>
+      <td>${barcodeStatusBadge(item.barcode_status)}</td>
+      <td><div class="barcode-scan-actions">
+        ${item.assignment_id ? `<button class="action-btn-sm" onclick="previewBarcodeAssignment(${item.assignment_id})" title="View barcode"><i class="fa-solid fa-eye"></i></button><button class="action-btn-sm" onclick="downloadBarcodeAssignment(${item.assignment_id}, 'png')" title="Download PNG"><i class="fa-solid fa-download"></i></button><button class="action-btn-sm" onclick="quickPrintBarcode(${item.assignment_id})" title="Print label"><i class="fa-solid fa-print"></i></button><button class="action-btn-sm" onclick="regenerateBarcodeAssignment(${item.assignment_id})" title="Regenerate barcode"><i class="fa-solid fa-rotate"></i></button>` : `<button class="action-btn-sm" onclick="generateBarcodeForProduct(${item.product_id})">Generate</button>`}
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function barcodeStatusBadge(status) {
+  const value = String(status || 'UNKNOWN').toUpperCase();
+  const css = ['ASSIGNED', 'COMPLETED', 'RESOLVED', 'READY'].includes(value) ? 'completed'
+    : ['FAILED', 'INVALID', 'DUPLICATE', 'UNKNOWN', 'OUT_OF_STOCK'].includes(value) ? 'cancelled'
+      : 'pending';
+  return `<span class="status-badge ${css}">${escapeHtml(value.replaceAll('_', ' '))}</span>`;
+}
+
+function toggleBarcodeSelection(assignmentId, checked) {
+  if (!assignmentId) return;
+  if (checked) selectedBarcodeAssignments.add(Number(assignmentId));
+  else selectedBarcodeAssignments.delete(Number(assignmentId));
+  updateBarcodeSelectionState();
+}
+
+function toggleAllBarcodeProducts(checked) {
+  barcodeProducts.filter(item => item.assignment_id).forEach(item => {
+    if (checked) selectedBarcodeAssignments.add(Number(item.assignment_id));
+    else selectedBarcodeAssignments.delete(Number(item.assignment_id));
+  });
+  renderBarcodeProductsTable();
+  updateBarcodeSelectionState();
+}
+
+function updateBarcodeSelectionState() {
+  const count = selectedBarcodeAssignments.size;
+  const countNode = document.getElementById('barcodeSelectedCount');
+  const batchNode = document.getElementById('barcodeBatchSelected');
+  if (countNode) countNode.textContent = count;
+  if (batchNode) batchNode.textContent = `${count} product${count === 1 ? '' : 's'} selected`;
+  const selectAll = document.getElementById('barcodeSelectAll');
+  const visible = barcodeProducts.filter(item => item.assignment_id);
+  if (selectAll) {
+    selectAll.checked = visible.length > 0 && visible.every(item => selectedBarcodeAssignments.has(Number(item.assignment_id)));
+    selectAll.indeterminate = visible.some(item => selectedBarcodeAssignments.has(Number(item.assignment_id))) && !selectAll.checked;
+  }
+}
+
+async function generateMissingBarcodes(productIds = null) {
+  const body = productIds?.length ? { product_ids: productIds.map(Number) } : {};
+  const data = await barcodeApi('/barcodes/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  showToast(`${data.generated} barcode${data.generated === 1 ? '' : 's'} assigned.`, data.generated ? 'success' : 'info');
+  await syncWithBackend();
+  await Promise.all([loadBarcodeOverview(), loadBarcodeProducts()]);
+  return data;
+}
+
+async function generateBarcodeForProduct(productId) {
+  try {
+    await generateMissingBarcodes([productId]);
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function generateSelectedBarcodes() {
+  const missingProductIds = barcodeProducts.filter(item => !item.assignment_id).map(item => item.product_id);
+  if (!missingProductIds.length) return showToast('No missing barcode products are visible in this filter.', 'info');
+  try {
+    await generateMissingBarcodes(missingProductIds);
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function downloadSelectedBarcode(format) {
+  if (!selectedBarcodeAssignments.size) return showToast('Select at least one assigned barcode.', 'info');
+  for (const id of selectedBarcodeAssignments) await downloadBarcodeAssignment(id, format, selectedBarcodeAssignments.size === 1);
+}
+
+async function downloadBarcodeAssignment(assignmentId, format = 'png', notify = true) {
+  try {
+    const response = await fetch(`/api/v1/barcodes/${assignmentId}/render?format=${encodeURIComponent(format)}&download=1`);
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error?.message || 'Barcode download failed.');
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('content-disposition') || '';
+    const filename = disposition.match(/filename="([^"]+)"/)?.[1] || `barcode-${assignmentId}.${format}`;
+    downloadBlob(blob, filename);
+    if (notify) showToast(`${format.toUpperCase()} downloaded.`, 'success');
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function previewBarcodeAssignment(assignmentId) {
+  const item = barcodeProducts.find(product => Number(product.assignment_id) === Number(assignmentId));
+  if (item) return openBarcodeModal(Number(item.product_id));
+  const response = await fetch(`/api/v1/barcodes/${assignmentId}/render?format=png`);
+  if (!response.ok) return showToast('Barcode preview failed.', 'error');
+  const blob = await response.blob();
+  const image = document.getElementById('barcodeImage');
+  if (image.dataset.objectUrl) URL.revokeObjectURL(image.dataset.objectUrl);
+  const objectUrl = URL.createObjectURL(blob);
+  image.src = objectUrl;
+  image.dataset.objectUrl = objectUrl;
+  image.dataset.assignmentId = assignmentId;
+  document.getElementById('barcodeProductTitle').textContent = 'Barcode label';
+  document.getElementById('barcodeModal').classList.add('active');
+}
+
+async function copyBarcodeValue(value) {
+  await navigator.clipboard.writeText(String(value));
+  showToast('Barcode copied.', 'success');
+}
+
+async function regenerateBarcodeAssignment(assignmentId) {
+  const reason = prompt('Why is this persistent barcode being regenerated? This action is audited.');
+  if (!reason?.trim()) return;
+  if (!confirm('The existing barcode will be archived and will no longer resolve in POS. Continue?')) return;
+  try {
+    const assignment = await barcodeApi(`/barcodes/${assignmentId}/regenerate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason.trim() })
+    });
+    selectedBarcodeAssignments.delete(Number(assignmentId));
+    selectedBarcodeAssignments.add(Number(assignment.id));
+    showToast(`Barcode regenerated as ${assignment.barcode_value}.`, 'success');
+    await Promise.all([loadBarcodeOverview(), loadBarcodeProducts()]);
+    await syncWithBackend();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+function populateBarcodeProductSelector() {
+  const select = document.getElementById('barcodeAssignProduct');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = '<option value="">Choose product</option>' + barcodeProducts.map(item =>
+    `<option value="${item.product_id}">${escapeHtml(item.product_name)} · ${escapeHtml(item.sku)}${item.assignment_id ? ' · assigned' : ''}</option>`
+  ).join('');
+  if ([...select.options].some(option => option.value === current)) select.value = current;
+}
+
+async function validateManualBarcode() {
+  const value = document.getElementById('barcodeAssignValue')?.value.trim();
+  const message = document.getElementById('barcodeValidationMessage');
+  if (!message) return;
+  if (!value) {
+    message.className = 'barcode-validation-state';
+    message.textContent = 'Leave the value empty to use the organization sequence.';
+    return;
+  }
+  try {
+    const result = await barcodeApi('/barcodes/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        barcode_value: value,
+        barcode_type: document.getElementById('barcodeAssignType')?.value || 'CODE128'
+      })
+    });
+    message.className = `barcode-validation-state ${result.valid ? 'valid' : 'invalid'}`;
+    message.textContent = result.message;
+  } catch (error) {
+    message.className = 'barcode-validation-state invalid';
+    message.textContent = error.message;
+  }
+}
+
+async function assignManualBarcode(event) {
+  event.preventDefault();
+  const productId = Number(document.getElementById('barcodeAssignProduct')?.value);
+  const value = document.getElementById('barcodeAssignValue')?.value.trim();
+  if (!productId) return showToast('Choose a product.', 'info');
+  try {
+    if (!value) {
+      await generateMissingBarcodes([productId]);
+    } else {
+      const assignment = await barcodeApi('/barcodes/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: productId,
+          barcode_value: value,
+          barcode_type: document.getElementById('barcodeAssignType')?.value || 'CODE128',
+          source: 'MANUAL'
+        })
+      });
+      showToast(`Barcode ${assignment.barcode_value} assigned.`, 'success');
+      await Promise.all([loadBarcodeOverview(), loadBarcodeProducts()]);
+      await syncWithBackend();
+    }
+    document.getElementById('barcodeAssignValue').value = '';
+    await validateManualBarcode();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+function refreshBarcodeAssignmentPreview() {
+  renderBarcodeAssignmentPreview();
+}
+
+async function renderBarcodeAssignmentPreview() {
+  const container = document.getElementById('barcodeAssignmentPreview');
+  if (!container) return;
+  const productId = Number(document.getElementById('barcodeAssignProduct')?.value);
+  const item = barcodeProducts.find(product => Number(product.product_id) === productId);
+  if (!item) {
+    container.className = 'barcode-label-preview barcode-label-preview-empty';
+    container.innerHTML = '<i class="fa-solid fa-barcode"></i><span>Select a product to preview its current identity.</span>';
+    return;
+  }
+  if (!item.assignment_id) {
+    container.className = 'barcode-label-preview barcode-label-preview-empty';
+    container.innerHTML = `<strong>${escapeHtml(item.product_name)}</strong><span>${escapeHtml(item.sku)}</span><small>Barcode will be generated from the organization sequence.</small>`;
+    return;
+  }
+  container.className = 'barcode-label-preview';
+  container.innerHTML = `<strong>${escapeHtml(item.product_name)}</strong><span>${escapeHtml(item.sku)}</span><div class="barcode-empty-state">Loading barcode preview…</div><small>${escapeHtml(item.barcode_value)}</small>`;
+  await setProtectedBarcodeImage(container, item.assignment_id);
+}
+
+async function loadBarcodeTemplates() {
+  const data = await barcodeApi('/barcode-templates');
+  barcodeTemplates = data.templates || [];
+  barcodeLayouts = data.layouts || [];
+  const templateSelect = document.getElementById('barcodePrintTemplate');
+  const layoutSelect = document.getElementById('barcodePrintLayout');
+  if (templateSelect) templateSelect.innerHTML = barcodeTemplates.map(item => `<option value="${item.id}" ${item.is_default ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('');
+  if (layoutSelect) layoutSelect.innerHTML = barcodeLayouts.map(item => `<option value="${item.id}" ${item.is_default ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('');
+  const list = document.getElementById('barcodeTemplateList');
+  if (list) list.innerHTML = barcodeTemplates.map(item => `<button type="button" onclick="editBarcodeTemplate(${item.id})"><span>${escapeHtml(item.name)}</span><span>${item.is_default ? 'Default' : escapeHtml(item.category)}</span></button>`).join('');
+  renderBarcodeSheetPreview();
+  return data;
+}
+
+function editBarcodeTemplate(id) {
+  const template = barcodeTemplates.find(item => Number(item.id) === Number(id));
+  if (!template) return;
+  const config = template.configuration || {};
+  document.getElementById('barcodeTemplateId').value = template.id;
+  document.getElementById('barcodeTemplateName').value = template.name;
+  document.getElementById('barcodeTemplateCategory').value = template.category;
+  document.getElementById('tplShowProduct').checked = config.show_product !== false;
+  document.getElementById('tplShowSku').checked = config.show_sku !== false;
+  document.getElementById('tplShowNumber').checked = config.show_barcode_number !== false;
+  document.getElementById('tplShowMrp').checked = config.show_mrp !== false;
+  document.getElementById('tplShowBatch').checked = Boolean(config.show_batch);
+  document.getElementById('tplShowExpiry').checked = Boolean(config.show_expiry);
+  document.getElementById('tplShowBorder').checked = config.border !== false;
+  document.getElementById('tplFontSize').value = config.font_size_pt || 8;
+  document.getElementById('tplBarcodeHeight').value = config.barcode_height_mm || 11;
+  document.getElementById('tplIsDefault').checked = Boolean(template.is_default);
+  renderBarcodeDesignerPreview();
+}
+
+async function saveBarcodeTemplate(event) {
+  event.preventDefault();
+  const id = document.getElementById('barcodeTemplateId').value;
+  const payload = {
+    name: document.getElementById('barcodeTemplateName').value.trim(),
+    category: document.getElementById('barcodeTemplateCategory').value,
+    is_default: document.getElementById('tplIsDefault').checked,
+    configuration: barcodeTemplateConfiguration()
+  };
+  try {
+    const saved = await barcodeApi(id ? `/barcode-templates/${id}` : '/barcode-templates', {
+      method: id ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    document.getElementById('barcodeTemplateId').value = saved.id;
+    showToast('Label template saved.', 'success');
+    await loadBarcodeTemplates();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+function barcodeTemplateConfiguration() {
+  return {
+    show_product: document.getElementById('tplShowProduct')?.checked !== false,
+    show_sku: document.getElementById('tplShowSku')?.checked !== false,
+    show_barcode_number: document.getElementById('tplShowNumber')?.checked !== false,
+    show_mrp: document.getElementById('tplShowMrp')?.checked !== false,
+    show_batch: Boolean(document.getElementById('tplShowBatch')?.checked),
+    show_expiry: Boolean(document.getElementById('tplShowExpiry')?.checked),
+    border: document.getElementById('tplShowBorder')?.checked !== false,
+    font_size_pt: Number(document.getElementById('tplFontSize')?.value || 8),
+    barcode_height_mm: Number(document.getElementById('tplBarcodeHeight')?.value || 11),
+    alignment: 'center'
+  };
+}
+
+async function renderBarcodeDesignerPreview() {
+  const preview = document.getElementById('barcodeDesignerPreview');
+  if (!preview) return;
+  const selectedTemplate = barcodeTemplates.find(item => Number(item.id) === Number(document.getElementById('barcodeTemplateId')?.value));
+  const config = document.getElementById('barcodeTemplateForm') ? barcodeTemplateConfiguration() : (selectedTemplate?.configuration || {});
+  const item = barcodeProducts.find(product => product.assignment_id);
+  preview.className = `barcode-label-preview${config.border === false ? ' without-border' : ''}`;
+  if (!item) {
+    preview.innerHTML = '<div class="barcode-empty-state">Assign a barcode to a real product to see a live preview.</div>';
+    return;
+  }
+  const fontSize = Math.max(5, Math.min(Number(config.font_size_pt || 8), 32));
+  preview.innerHTML = `
+    ${config.show_product !== false ? `<strong style="font-size:${fontSize + 2}px">${escapeHtml(item.product_name)}</strong>` : ''}
+    ${config.show_sku !== false ? `<span>SKU ${escapeHtml(item.sku)}</span>` : ''}
+    <div class="barcode-empty-state">Loading print image…</div>
+    ${config.show_barcode_number !== false ? `<small>${escapeHtml(item.barcode_value)}</small>` : ''}
+    ${config.show_mrp !== false ? `<strong>MRP ${currencySymbol}${Number(item.selling_price || 0).toFixed(2)}</strong>` : ''}
+    ${config.show_batch && item.batch_no ? `<span>Batch ${escapeHtml(item.batch_no)}</span>` : ''}
+    ${config.show_expiry && item.expires_at ? `<span>Expiry ${escapeHtml(String(item.expires_at).slice(0, 10))}</span>` : ''}`;
+  await setProtectedBarcodeImage(preview, item.assignment_id);
+}
+
+async function setProtectedBarcodeImage(container, assignmentId) {
+  try {
+    const response = await fetch(`/api/v1/barcodes/${assignmentId}/render?format=png`);
+    if (!response.ok) return;
+    const image = document.createElement('img');
+    const objectUrl = URL.createObjectURL(await response.blob());
+    image.src = objectUrl;
+    image.alt = 'Generated product barcode';
+    image.onload = () => URL.revokeObjectURL(objectUrl);
+    container.querySelector('.barcode-empty-state')?.replaceWith(image);
+  } catch {
+    // Keep the explicit loading/error state in the preview.
+  }
+}
+
+function renderBarcodeSheetPreview() {
+  const preview = document.getElementById('barcodeSheetPreview');
+  if (!preview) return;
+  const layout = barcodeLayouts.find(item => Number(item.id) === Number(document.getElementById('barcodePrintLayout')?.value)) || barcodeLayouts[0];
+  const columns = Number(layout?.columns || 4);
+  const rows = Number(layout?.rows || 10);
+  const slots = Math.min(columns * rows, 65);
+  const startingPosition = Math.max(1, Number(document.getElementById('barcodePrintStart')?.value || 1));
+  const selected = barcodeProducts.filter(item => selectedBarcodeAssignments.has(Number(item.assignment_id)));
+  const quantity = Math.max(1, Number(document.getElementById('barcodePrintQuantity')?.value || 1));
+  const labels = selected.flatMap(item => Array.from({ length: quantity }, () => item));
+  preview.style.gridTemplateColumns = `repeat(${Math.min(columns, 8)}, minmax(0, 1fr))`;
+  preview.innerHTML = Array.from({ length: slots }, (_, index) => {
+    if (index < startingPosition - 1) return '<div class="barcode-sheet-slot blank">Skipped</div>';
+    const item = labels[(index - (startingPosition - 1)) % Math.max(labels.length, 1)];
+    if (!item) return '<div class="barcode-sheet-slot blank">Empty</div>';
+    return `<div class="barcode-sheet-slot"><div><i class="fa-solid fa-barcode"></i><strong>${escapeHtml(item.product_name)}</strong><br>${escapeHtml(item.barcode_value || '')}</div></div>`;
+  }).join('');
+}
+
+async function submitBarcodePrintJob(event, options = {}) {
+  event?.preventDefault?.();
+  const selected = barcodeProducts.filter(item => selectedBarcodeAssignments.has(Number(item.assignment_id)));
+  if (!selected.length) return showToast('Select assigned products before creating a print job.', 'info');
+  const quantity = Math.max(1, Number(options.quantity || document.getElementById('barcodePrintQuantity')?.value || 1));
+  try {
+    const job = await barcodeApi('/barcode-print-jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        template_id: Number(document.getElementById('barcodePrintTemplate')?.value),
+        layout_id: Number(document.getElementById('barcodePrintLayout')?.value),
+        output_type: options.output_type || document.getElementById('barcodePrintOutput')?.value || 'PDF',
+        printer_type: 'browser',
+        copies: Number(document.getElementById('barcodePrintCopies')?.value || 1),
+        starting_position: Number(document.getElementById('barcodePrintStart')?.value || 1),
+        items: selected.map(item => ({ assignment_id: Number(item.assignment_id), quantity }))
+      })
+    });
+    if (job.status === 'COMPLETED') {
+      showToast(`${job.label_count} labels prepared.`, 'success');
+      await downloadBarcodePrintJob(job.id, Boolean(options.openForPrint));
+    } else {
+      showToast(job.error_message || 'Print job is retained for retry.', 'info');
+    }
+    await Promise.all([loadBarcodePrintJobs('queue'), loadBarcodeOverview()]);
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function quickPrintBarcode(assignmentId) {
+  selectedBarcodeAssignments = new Set([Number(assignmentId)]);
+  updateBarcodeSelectionState();
+  await submitBarcodePrintJob(null, { quantity: 1, output_type: 'PDF', openForPrint: true });
+}
+
+async function printBarcodeTestPage() {
+  if (!selectedBarcodeAssignments.size) return showToast('Select one assigned product for the test page.', 'info');
+  const first = [...selectedBarcodeAssignments][0];
+  selectedBarcodeAssignments = new Set([first]);
+  updateBarcodeSelectionState();
+  await submitBarcodePrintJob(null, { quantity: 1, output_type: 'PDF', openForPrint: true });
+}
+
+async function loadBarcodePrintJobs(view = 'queue') {
+  const data = await barcodeApi('/barcode-print-jobs?limit=200');
+  const jobs = data.jobs || [];
+  renderBarcodeJobsTable('barcodeQueueTable', jobs.filter(job => ['PENDING', 'RUNNING', 'FAILED'].includes(job.status)), false);
+  renderBarcodeJobsTable('barcodeHistoryTable', jobs.filter(job => ['COMPLETED', 'CANCELLED'].includes(job.status)), true);
+  return jobs;
+}
+
+function renderBarcodeJobsTable(id, jobs, history) {
+  const body = document.getElementById(id);
+  if (!body) return;
+  if (!jobs.length) {
+    body.innerHTML = `<tr><td colspan="8" class="barcode-empty-state">No ${history ? 'print history' : 'queued print jobs'}.</td></tr>`;
+    return;
+  }
+  body.innerHTML = jobs.map(job => `<tr>
+    <td><strong>${escapeHtml(job.job_number)}</strong></td><td>${escapeHtml(job.template_name)}</td><td>${escapeHtml(job.layout_name)}</td>
+    <td>${Number(job.label_count || 0)}</td><td>${escapeHtml(job.output_type)}</td><td>${barcodeStatusBadge(job.status)}</td>
+    <td>${formatBarcodeDate(history ? job.completed_at : job.created_at)}</td>
+    <td><div class="barcode-scan-actions">
+      ${job.status === 'COMPLETED' ? `<button class="action-btn-sm" onclick="downloadBarcodePrintJob(${job.id})"><i class="fa-solid fa-download"></i> Download</button>` : ''}
+      ${job.status === 'FAILED' ? `<button class="action-btn-sm" onclick="retryBarcodePrintJob(${job.id})"><i class="fa-solid fa-rotate"></i> Retry</button><button class="action-btn-sm" onclick="cancelBarcodePrintJob(${job.id})">Cancel</button>` : ''}
+    </div></td>
+  </tr>`).join('');
+}
+
+async function retryBarcodePrintJob(id) {
+  try {
+    const job = await barcodeApi(`/barcode-print-jobs/${id}/retry`, { method: 'POST' });
+    showToast(job.status === 'COMPLETED' ? 'Print job completed.' : (job.error_message || 'Print retry failed.'), job.status === 'COMPLETED' ? 'success' : 'error');
+    await loadBarcodePrintJobs('queue');
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function cancelBarcodePrintJob(id) {
+  if (!confirm('Cancel this retained print job? Barcode assignments will not be changed.')) return;
+  try {
+    await barcodeApi(`/barcode-print-jobs/${id}/cancel`, { method: 'POST' });
+    showToast('Print job cancelled.', 'success');
+    await loadBarcodePrintJobs('queue');
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function downloadBarcodePrintJob(id, openForPrint = false) {
+  try {
+    const response = await fetch(`/api/v1/barcode-print-jobs/${id}/download`);
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error?.message || 'Print output download failed.');
+    }
+    const blob = await response.blob();
+    if (openForPrint && blob.type === 'application/pdf') {
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return;
+    }
+    const disposition = response.headers.get('content-disposition') || '';
+    const filename = disposition.match(/filename="([^"]+)"/)?.[1] || `barcode-print-${id}`;
+    downloadBlob(blob, filename);
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function submitBarcodeWorkspaceScan(event, explicitValue = null, source = 'MANUAL') {
+  event?.preventDefault?.();
+  const input = document.getElementById('barcodeWorkspaceScanInput');
+  const value = String(explicitValue || input?.value || '').trim();
+  if (!value) return;
+  const resultNode = document.getElementById('barcodeScanResult');
+  if (resultNode) resultNode.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Resolving barcode…';
+  try {
+    const response = await fetch('/api/v1/barcode-scans/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ barcode_value: value, source, action: 'RESOLVE' })
+    });
+    const result = await response.json();
+    if (!response.ok && !result.resolved) {
+      if (resultNode) resultNode.innerHTML = `<div class="barcode-scan-product"><h4>Unknown barcode</h4><code>${escapeHtml(value)}</code><p>No product or variant is assigned to this value.</p><div class="barcode-scan-actions"><button class="action-btn primary" onclick="prepareUnknownBarcodeAssignment(decodeURIComponent('${encodeURIComponent(value)}'))">Assign to product</button></div></div>`;
+      showToast('Unknown barcode recorded for review.', 'error');
+    } else {
+      renderBarcodeScanResult(result);
+      if (barcodeSettings?.scanner?.sound) playBarcodeFeedback(result.status === 'RESOLVED');
+    }
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+    await loadBarcodeScanHistory();
+  } catch (error) {
+    if (resultNode) resultNode.innerHTML = `<div class="barcode-empty-state">${escapeHtml(error.message)}</div>`;
+    showToast(error.message, 'error');
+  }
+}
+
+function renderBarcodeScanResult(result) {
+  const node = document.getElementById('barcodeScanResult');
+  if (!node || !result.product) return;
+  node.innerHTML = `<div class="barcode-scan-product">
+    <div>${barcodeStatusBadge(result.status)}</div>
+    <h4>${escapeHtml(result.product.name)}</h4>
+    <span>${escapeHtml(result.variant?.name ? `${result.variant.name} · ` : '')}${escapeHtml(result.variant?.sku || result.product.sku)}</span>
+    <strong>${currencySymbol}${Number(result.product.selling_price || 0).toFixed(2)} · Stock ${Number(result.product.available_stock || 0)}</strong>
+    <div class="barcode-scan-actions">
+      <button class="action-btn primary" ${Number(result.product.available_stock || 0) <= 0 ? 'disabled' : ''} onclick="addScannedProductToPos(${result.product.id})"><i class="fa-solid fa-cart-plus"></i> Add to POS</button>
+      <button class="action-btn secondary" onclick="switchTab('inventory')">Open product list</button>
+    </div>
+  </div>`;
+}
+
+function addScannedProductToPos(productId) {
+  const product = products.find(item => Number(item.id) === Number(productId));
+  if (!product) return showToast('Refresh product data before adding this scan to POS.', 'info');
+  addToCart(Number(productId));
+  switchTab('pos');
+  showToast(`${product.name} added to POS.`, 'success');
+}
+
+function prepareUnknownBarcodeAssignment(value) {
+  openBarcodeWorkspaceView('generate');
+  const input = document.getElementById('barcodeAssignValue');
+  if (input) input.value = value;
+  validateManualBarcode();
+}
+
+async function loadBarcodeScanHistory() {
+  const data = await barcodeApi('/barcode-scans/history?limit=100');
+  renderBarcodeActivityList('barcodeScanHistory', data.scans, item => ({
+    title: item.product_name || item.barcode_value,
+    subtitle: `${item.status} · ${item.source}${item.sku ? ` · ${item.sku}` : ''}`,
+    trailing: formatBarcodeDate(item.created_at)
+  }));
+  return data.scans;
+}
+
+async function startBarcodeCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) return showToast('Camera scanning is not supported in this browser.', 'error');
+  if (!('BarcodeDetector' in window)) return showToast('This browser does not provide native BarcodeDetector support. Use a USB scanner or manual input.', 'info');
+  try {
+    barcodeCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    const region = document.getElementById('barcodeCameraRegion');
+    const video = document.getElementById('barcodeCameraVideo');
+    region.hidden = false;
+    video.srcObject = barcodeCameraStream;
+    await video.play();
+    const detector = new BarcodeDetector();
+    barcodeCameraTimer = setInterval(async () => {
+      try {
+        const codes = await detector.detect(video);
+        if (!codes.length) return;
+        const value = codes[0].rawValue;
+        stopBarcodeCamera();
+        await submitBarcodeWorkspaceScan(null, value, 'CAMERA');
+      } catch {
+        // Continue the camera loop; transient decode misses are expected.
+      }
+    }, 500);
+    document.getElementById('barcodeScannerStatus').textContent = 'Camera active';
+  } catch (error) {
+    showToast(error.name === 'NotAllowedError' ? 'Camera permission was denied.' : error.message, 'error');
+  }
+}
+
+function stopBarcodeCamera() {
+  clearInterval(barcodeCameraTimer);
+  barcodeCameraTimer = null;
+  barcodeCameraStream?.getTracks().forEach(track => track.stop());
+  barcodeCameraStream = null;
+  const region = document.getElementById('barcodeCameraRegion');
+  const video = document.getElementById('barcodeCameraVideo');
+  if (video) video.srcObject = null;
+  if (region) region.hidden = true;
+  const status = document.getElementById('barcodeScannerStatus');
+  if (status) status.textContent = 'Ready';
+}
+
+function playBarcodeFeedback(success) {
+  try {
+    const context = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.frequency.value = success ? 880 : 220;
+    gain.gain.setValueAtTime(.06, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.001, context.currentTime + .09);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + .1);
+  } catch {
+    // Audio feedback is optional.
+  }
+}
+
+async function loadBarcodeAnalytics() {
+  const data = await barcodeApi('/barcode-analytics');
+  const cards = [
+    ['Active assignments', data.assignments.total || 0, 'fa-barcode'],
+    ['Resolved scans', data.scans.resolved || 0, 'fa-circle-check'],
+    ['Unknown scans', data.scans.unknown || 0, 'fa-circle-question'],
+    ['Labels produced', data.print_jobs.labels || 0, 'fa-print'],
+    ['Completed jobs', data.print_jobs.completed || 0, 'fa-list-check'],
+    ['Failed jobs', data.print_jobs.failed || 0, 'fa-triangle-exclamation']
+  ];
+  const container = document.getElementById('barcodeAnalyticsKpis');
+  if (container) container.innerHTML = cards.map(([label, value, icon]) => `<article class="kpi-card"><div class="barcode-kpi-card-top"><span class="kpi-label">${escapeHtml(label)}</span><i class="fa-solid ${icon}"></i></div><h3 class="kpi-value">${Number(value).toLocaleString()}</h3></article>`).join('');
+  renderBarcodeActivityList('barcodeTemplateAnalytics', data.template_usage, item => ({
+    title: item.name,
+    subtitle: `${item.uses} jobs`,
+    trailing: `<strong>${Number(item.labels || 0).toLocaleString()} labels</strong>`
+  }));
+  renderBarcodeActivityList('barcodeTopPrinted', data.top_printed, item => ({
+    title: item.product_name,
+    subtitle: `${item.sku} · ${item.barcode_value}`,
+    trailing: `<strong>${Number(item.print_count || 0).toLocaleString()}</strong>`
+  }));
+  return data;
+}
+
+async function loadBarcodeRecommendations() {
+  const data = await barcodeApi('/barcode-recommendations');
+  const provider = document.getElementById('barcodeRecommendationProvider');
+  if (provider) provider.textContent = data.provider?.fallback ? 'Grounded local intelligence' : data.provider?.active;
+  const container = document.getElementById('barcodeRecommendations');
+  if (!container) return data;
+  container.innerHTML = (data.recommendations || []).map(item => `<article class="barcode-recommendation-card">
+    <span class="status-badge ${item.priority === 'high' ? 'cancelled' : item.priority === 'medium' ? 'pending' : 'completed'}">${escapeHtml(item.priority)}</span>
+    <h5>${escapeHtml(item.title)}</h5><p>${escapeHtml(item.reason)}</p>
+    <button class="action-btn secondary" onclick="runBarcodeRecommendation('${escapeHtml(item.action)}')">Review recommendation</button>
+  </article>`).join('');
+  return data;
+}
+
+function runBarcodeRecommendation(action) {
+  const routes = {
+    GENERATE_MISSING: 'generate',
+    OPEN_SCANNER_HISTORY: 'scanner',
+    OPEN_BATCH_PRINT: 'batch',
+    OPEN_PRODUCTS: 'products',
+    OPEN_PRINT_QUEUE: 'queue',
+    OPEN_ANALYTICS: 'analytics'
+  };
+  openBarcodeWorkspaceView(routes[action] || 'overview');
+}
+
+async function loadBarcodeSettings() {
+  barcodeSettings = await barcodeApi('/barcode-settings');
+  const setChecked = (id, value) => { const node = document.getElementById(id); if (node) node.checked = Boolean(value); };
+  const setValue = (id, value) => { const node = document.getElementById(id); if (node) node.value = value ?? ''; };
+  setChecked('barcodeSetEnabled', barcodeSettings.enabled);
+  setChecked('barcodeSetAuto', barcodeSettings.auto_generate);
+  setChecked('barcodeSetManual', barcodeSettings.allow_manual);
+  setChecked('barcodeSetRegenerate', barcodeSettings.allow_regeneration);
+  setChecked('barcodeSetDuplicates', barcodeSettings.prevent_duplicates);
+  setChecked('barcodeSetSound', barcodeSettings.scanner?.sound);
+  setChecked('barcodeSetAutoPos', barcodeSettings.scanner?.auto_add_to_pos);
+  setValue('barcodeSetType', barcodeSettings.default_type);
+  setValue('barcodeSetPrefix', barcodeSettings.prefix);
+  setValue('barcodeSetSuffix', barcodeSettings.suffix);
+  setValue('barcodeSetLength', barcodeSettings.sequence_length);
+  setValue('barcodeSetTermination', barcodeSettings.scanner?.termination_key);
+  setValue('barcodeSetDelay', barcodeSettings.scanner?.duplicate_delay_ms);
+  const productType = document.getElementById('pBarcodeType');
+  if (productType) productType.value = barcodeSettings.default_type || 'CODE128';
+  return barcodeSettings;
+}
+
+async function saveBarcodeSettings(event) {
+  event.preventDefault();
+  try {
+    barcodeSettings = await barcodeApi('/barcode-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enabled: document.getElementById('barcodeSetEnabled').checked,
+        auto_generate: document.getElementById('barcodeSetAuto').checked,
+        default_type: document.getElementById('barcodeSetType').value,
+        prefix: document.getElementById('barcodeSetPrefix').value,
+        suffix: document.getElementById('barcodeSetSuffix').value,
+        sequence_length: Number(document.getElementById('barcodeSetLength').value),
+        prevent_duplicates: document.getElementById('barcodeSetDuplicates').checked,
+        allow_manual: document.getElementById('barcodeSetManual').checked,
+        allow_regeneration: document.getElementById('barcodeSetRegenerate').checked,
+        scanner: {
+          termination_key: document.getElementById('barcodeSetTermination').value,
+          duplicate_delay_ms: Number(document.getElementById('barcodeSetDelay').value),
+          sound: document.getElementById('barcodeSetSound').checked,
+          auto_add_to_pos: document.getElementById('barcodeSetAutoPos').checked
+        }
+      })
+    });
+    showToast('Barcode settings saved.', 'success');
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+function formatBarcodeDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return escapeHtml(value);
+  return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+let barcodeHidBuffer = '';
+let barcodeHidLastKeyAt = 0;
+document.addEventListener('keydown', event => {
+  if (!['pos', 'barcodes'].includes(currentTab) || event.ctrlKey || event.metaKey || event.altKey) return;
+  const target = event.target;
+  if (target?.matches?.('input, textarea, select, [contenteditable="true"]')) return;
+  const timestamp = Date.now();
+  if (timestamp - barcodeHidLastKeyAt > 80) barcodeHidBuffer = '';
+  barcodeHidLastKeyAt = timestamp;
+  if (event.key === 'Enter' || event.key === 'Tab') {
+    if (barcodeHidBuffer.length >= 4) {
+      event.preventDefault();
+      const value = barcodeHidBuffer;
+      barcodeHidBuffer = '';
+      if (currentTab === 'pos') {
+        openScannerModal();
+        document.getElementById('manualScanInput').value = value;
+        document.querySelector('#scannerModal form')?.requestSubmit();
+      } else {
+        openBarcodeWorkspaceView('scanner');
+        submitBarcodeWorkspaceScan(null, value, 'HID');
+      }
+    }
+    return;
+  }
+  if (event.key.length === 1) barcodeHidBuffer += event.key;
+});
 
 // ================= PHASE 3: FINANCE & ACCOUNTING =================
 let financeAccounts = [];
@@ -3397,13 +5205,7 @@ async function submitEditCategoryModal(event) {
     closeCategoryEditModal();
     await syncWithBackend();
   } catch (err) {
-    console.error('Edit category API failed, using fallback:', err);
-    cat.name = name;
-    cat.description = description;
-    cat.updated_at = new Date();
-    alert('Category updated successfully (simulated)!');
-    closeCategoryEditModal();
-    loadCategoryManagement();
+    showToast(err.message || 'Category was not updated.', 'error');
   }
 }
 
@@ -3474,14 +5276,7 @@ async function submitNewBrandModal(event) {
     closeBrandModal();
     await syncWithBackend();
   } catch (err) {
-    console.error('Brand modal create failed:', err);
-    alert('[Offline Demo] Brand created successfully (simulated).');
-    brands.push({ id: brands.length + 1, name, code });
-    document.getElementById('brandModalForm').reset();
-    closeBrandModal();
-    loadBrandManagement();
-    loadBrandsAndCategories();
-    populateDropdowns();
+    showToast(err.message || 'Brand was not created.', 'error');
   }
 }
 
@@ -3527,14 +5322,7 @@ async function submitEditBrandModal(event) {
     closeBrandEditModal();
     await syncWithBackend();
   } catch (err) {
-    console.error('Edit brand API failed, using fallback:', err);
-    brand.name = name;
-    brand.code = code;
-    alert('Brand updated successfully (simulated)!');
-    closeBrandEditModal();
-    loadBrandManagement();
-    loadBrandsAndCategories();
-    populateDropdowns();
+    showToast(err.message || 'Brand was not updated.', 'error');
   }
 }
 
@@ -3651,13 +5439,7 @@ async function submitNewWarehouseModal(event) {
     closeWarehouseModal();
     await syncWithBackend();
   } catch (err) {
-    console.error('Warehouse modal create failed:', err);
-    alert('[Offline Demo] Warehouse location created successfully (simulated).');
-    warehouses.push({ id: warehouses.length + 1, name, code, type, address });
-    document.getElementById('warehouseModalForm').reset();
-    closeWarehouseModal();
-    loadWarehouseManagement();
-    populateDropdowns();
+    showToast(err.message || 'Warehouse was not created.', 'error');
   }
 }
 
@@ -3707,15 +5489,7 @@ async function submitEditWarehouseModal(event) {
     closeWarehouseEditModal();
     await syncWithBackend();
   } catch (err) {
-    console.error('Edit warehouse API failed, using fallback:', err);
-    wh.name = name;
-    wh.code = code;
-    wh.type = type;
-    wh.address = address;
-    alert('Warehouse location updated successfully (simulated)!');
-    closeWarehouseEditModal();
-    loadWarehouseManagement();
-    populateDropdowns();
+    showToast(err.message || 'Warehouse was not updated.', 'error');
   }
 }
 
@@ -3793,7 +5567,7 @@ async function sendAiMessage(event) {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
   try {
-    const res = await fetch('/api/ai/chat', {
+    const res = await fetch('/api/v1/ai/chat', {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({
@@ -3891,7 +5665,7 @@ async function rejectAiAction(id) {
 
 async function updateAiAction(id, operation, body = {}) {
   try {
-    const response = await fetch(`/api/ai/actions/${encodeURIComponent(id)}/${operation}`, {
+    const response = await fetch(`/api/v1/ai/actions/${encodeURIComponent(id)}/${operation}`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(body)
@@ -3907,7 +5681,7 @@ async function updateAiAction(id, operation, body = {}) {
 
 async function loadAiStatus() {
   try {
-    const response = await fetch('/api/ai/status', { headers: getAuthHeaders() });
+    const response = await fetch('/api/v1/ai/status');
     const status = await response.json();
     if (!response.ok) throw new Error(status.error || 'AI status unavailable.');
     setAiProviderLabels(status);
@@ -3953,7 +5727,7 @@ async function loadDashboardAi() {
   const score = document.getElementById('dashboardHealthScore');
   if (!score || !localStorage.getItem('token')) return;
   try {
-    const response = await fetch('/api/ai/insights', { headers: getAuthHeaders() });
+    const response = await fetch('/api/v1/ai/insights');
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'AI summary unavailable.');
     renderBusinessHealth(data.health, 'dashboard');
@@ -3997,10 +5771,10 @@ async function loadAiWorkspace() {
   if (!document.getElementById('aiHealthScore')) return;
   try {
     const [insightsResponse, forecastResponse, actionsResponse, knowledgeResponse, status] = await Promise.all([
-      fetch('/api/ai/insights', { headers: getAuthHeaders() }),
-      fetch('/api/ai/forecast/inventory?days=30', { headers: getAuthHeaders() }),
-      fetch('/api/ai/actions?status=pending', { headers: getAuthHeaders() }),
-      fetch('/api/ai/knowledge', { headers: getAuthHeaders() }),
+      fetch('/api/v1/ai/insights'),
+      fetch('/api/v1/ai/forecast/inventory?days=30'),
+      fetch('/api/v1/ai/actions?status=pending'),
+      fetch('/api/v1/ai/knowledge'),
       loadAiStatus()
     ]);
     const [insights, forecast, actions, knowledge] = await Promise.all([
@@ -4046,7 +5820,7 @@ async function submitAiKnowledge(event) {
   const content = document.getElementById('aiKnowledgeContent').value.trim();
   const tags = document.getElementById('aiKnowledgeTags').value.trim();
   try {
-    const response = await fetch('/api/ai/knowledge', {
+    const response = await fetch('/api/v1/ai/knowledge', {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ title, content, tags })
@@ -4076,12 +5850,12 @@ function renderAiKnowledge(documents = []) {
 }
 
 async function archiveAiKnowledge(id, status) {
-  await mutateAiKnowledge(`/api/ai/knowledge/${encodeURIComponent(id)}`, 'PUT', { status }, status === 'active' ? 'Knowledge restored.' : 'Knowledge archived.');
+  await mutateAiKnowledge(`/api/v1/ai/knowledge/${encodeURIComponent(id)}`, 'PUT', { status }, status === 'active' ? 'Knowledge restored.' : 'Knowledge archived.');
 }
 
 async function deleteAiKnowledge(id) {
   if (!window.confirm('Delete this knowledge document?')) return;
-  await mutateAiKnowledge(`/api/ai/knowledge/${encodeURIComponent(id)}`, 'DELETE', null, 'Knowledge document deleted.');
+  await mutateAiKnowledge(`/api/v1/ai/knowledge/${encodeURIComponent(id)}`, 'DELETE', null, 'Knowledge document deleted.');
 }
 
 async function mutateAiKnowledge(url, method, body, successMessage) {
@@ -4186,6 +5960,11 @@ function selectCustomerForCart(customerId, displayText) {
   if (hiddenInput) hiddenInput.value = customerId || '';
   if (searchInput) searchInput.value = displayText;
   if (dropdown) dropdown.style.display = 'none';
+  const customer = customers.find(item => Number(item.id) === Number(customerId));
+  const gstinInput = document.getElementById('posCustomerGstin');
+  const addressInput = document.getElementById('posCustomerAddress');
+  if (gstinInput) gstinInput.value = customer?.gstin || '';
+  if (addressInput) addressInput.value = customer?.address || '';
 }
 
 // Close customer search dropdown list on outside click
@@ -4394,17 +6173,11 @@ async function deleteCustomer(customerId) {
   const custName = cust ? cust.name : 'Customer';
 
   const actionFn = async () => {
-    const res = await fetch(`/api/sales/customers/${customerId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || 'mock-token'}`,
-        'x-user-role': localStorage.getItem('role') || 'admin'
-      }
-    });
+    const res = await fetch(`/api/v1/customers/${customerId}`, { method: 'DELETE' });
 
     if (!res.ok) {
       const err = await res.json();
-      throw new Error(err.error || 'Server error');
+      throw new Error(err.error?.message || 'Server error');
     }
 
     await syncWithBackend();
