@@ -125,8 +125,16 @@
         </div>
       </div>
 
-      <button class="nav-btn" data-tab="finance" data-module="finance" data-view="overview" data-permission="finance.read"><i class="fa-solid fa-wallet"></i> Finance</button>
+      <div class="nav-dropdown-wrapper" id="dropdownFinance">
+        <button class="nav-btn nav-dropdown-trigger"><i class="fa-solid fa-wallet"></i> Finance <i class="fa-solid fa-chevron-down caret"></i></button>
+        <div class="nav-dropdown-content">
+          <button class="nav-dropdown-item" data-tab="finance" data-module="finance" data-view="overview" data-permission="finance.read"><i class="fa-solid fa-chart-line"></i> Overview</button>
+          <button class="nav-dropdown-item" data-tab="milestone3-workspace" data-module="finance" data-view="payment-links" data-permission="finance.read" data-feature="finance_v2"><i class="fa-solid fa-link"></i> Payment Links</button>
+        </div>
+      </div>
+      <button class="nav-btn" data-tab="milestone3-workspace" data-module="projects" data-view="overview" data-permission="projects.read" data-feature="projects_v2"><i class="fa-solid fa-diagram-project"></i> Projects</button>
       <p class="nav-section-label nav-section-secondary">Tools</p>
+      <button class="nav-btn" data-tab="milestone3-workspace" data-module="reminders" data-view="overview" data-permission="reminders.read" data-feature="reminders_v2"><i class="fa-solid fa-bell"></i> Reminders</button>
       <button class="nav-btn" data-tab="reports" data-module="insights" data-view="analytics" data-permission="reports.read"><i class="fa-solid fa-chart-simple"></i> Analytics</button>
       <button class="nav-btn" data-tab="automation" data-module="ai" data-view="copilot" data-permission="ai.read"><i class="fa-solid fa-wand-magic-sparkles"></i> Inventia AI <span class="nav-badge new">AI</span></button>
       <button class="nav-btn" data-tab="settings-tab" data-module="settings" data-view="organization" data-permission="settings.manage"><i class="fa-solid fa-gear"></i> Settings</button>
@@ -1956,6 +1964,25 @@
         <div class="modal-header"><h3 id="m1DetailTitle">Details</h3><button class="action-btn secondary compact" type="button" id="m1DetailClose" aria-label="Close details"><i class="fa-solid fa-xmark"></i></button></div>
         <div class="workspace-detail-body" id="m1DetailBody"></div>
       </aside>
+    </section>
+
+    <!-- MILESTONE 3: payments, reminders, and projects -->
+    <section id="milestone3-workspace" class="tab-panel workspace-page">
+      <div class="workspace-page-hero">
+        <div class="workspace-page-icon violet" id="m3WorkspaceIcon"><i class="fa-solid fa-layer-group"></i></div>
+        <div><p class="eyebrow">Business operations</p><h2 id="m3WorkspaceTitle">Workspace</h2><p id="m3WorkspaceDescription">Tenant-scoped operational records.</p></div>
+        <div class="panel-actions" id="m3WorkspaceActions"></div>
+      </div>
+      <div class="kpi-grid" id="m3WorkspaceKpis" hidden></div>
+      <div class="grid-panel">
+        <div class="panel-title-row">
+          <div><h3 id="m3PanelTitle">Records</h3><p>Validated, permission-controlled, and audited.</p></div>
+          <button class="action-btn secondary compact" id="m3Refresh" type="button"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+        <div id="m3WorkspaceForm" class="workspace-detail-section" hidden></div>
+        <div id="m3WorkspaceState" class="workspace-inline-state" role="status">Loading…</div>
+        <div class="table-container" id="m3WorkspaceTable"></div>
+      </div>
     </section>
 
     <!-- WORKSPACE: Purchases -->

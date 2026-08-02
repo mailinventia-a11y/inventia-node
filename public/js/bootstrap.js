@@ -5,6 +5,7 @@ import { OrganizationRealtimeClient } from './core/realtime.js';
 import { WorkspaceRouter } from './core/router.js';
 import { createStateStore } from './core/state.js';
 import { installMilestone1 } from './milestone1.js';
+import { installMilestone3 } from './milestone3.js';
 
 const store = createStateStore({
   ready: false,
@@ -18,6 +19,7 @@ const api = new InventiaApiClient();
 const router = new WorkspaceRouter({ store, permissions: () => readStoredPermissions() });
 const realtime = new OrganizationRealtimeClient();
 installMilestone1({ router, api, store });
+installMilestone3({ router, api, store });
 
 async function initializeAuthenticated() {
   const authenticated = Boolean(localStorage.getItem('phase5AccessToken'));

@@ -2,8 +2,8 @@ export const phase5OpenApi = {
   openapi: '3.1.0',
   info: {
     title: 'Inventia Enterprise Core Trade API',
-    version: '6.0.0',
-    description: 'Tenant-isolated products, inventory, trade, GST invoices, unified payments, barcodes, labels, dashboard, settings namespaces, and feature-flag APIs.'
+    version: '7.0.0',
+    description: 'Tenant-isolated trade, GST invoices, payments, accounting, reminders, projects, inventory, barcodes, settings, and feature-flag APIs.'
   },
   servers: [{ url: '/api/v1' }],
   components: {
@@ -152,6 +152,32 @@ export const phase5OpenApi = {
     '/payment-allocations/{id}/confirm': { post: { summary: 'Confirm an authorized pending manual allocation', responses: { 200: { description: 'Allocation confirmed' } } } },
     '/payment-allocations/{id}/refunds': { post: { summary: 'Refund a successful manual allocation', responses: { 201: { description: 'Refund recorded' } } } },
     '/payments/timeline': { get: { summary: 'Canonical invoice, payment, refund, and payment-link timeline', responses: { 200: { description: 'Payment timeline' } } } },
+    '/payment-links': {
+      get: { summary: 'List tenant payment links without secret tokens', responses: { 200: { description: 'Payment links' } } },
+      post: { summary: 'Create a bounded payment link for an outstanding invoice', responses: { 201: { description: 'Payment link created; raw token returned once' } } }
+    },
+    '/payment-links/{id}/cancel': { post: { summary: 'Cancel an active payment link', responses: { 200: { description: 'Payment link cancelled' } } } },
+    '/payment-links/public/{organizationId}/{token}': { get: { security: [], summary: 'Resolve a public payment request without exposing invoice internals', responses: { 200: { description: 'Payment request' }, 404: { description: 'Unknown link' } } } },
+    '/reminders': {
+      get: { summary: 'List scheduled and delivered tenant reminders', responses: { 200: { description: 'Reminders' } } },
+      post: { summary: 'Schedule an in-app or configured-channel reminder', responses: { 201: { description: 'Reminder scheduled' } } }
+    },
+    '/reminders/{id}/cancel': { post: { summary: 'Cancel a scheduled reminder', responses: { 200: { description: 'Reminder cancelled' } } } },
+    '/reminders/process-due': { post: { summary: 'Process due reminders for the active organization', responses: { 200: { description: 'Delivery results' } } } },
+    '/notifications': { get: { summary: 'List tenant in-app notifications visible to the active user', responses: { 200: { description: 'Notifications' } } } },
+    '/notifications/{id}/read': { post: { summary: 'Mark a visible notification as read', responses: { 200: { description: 'Notification updated' } } } },
+    '/projects': {
+      get: { summary: 'List projects with actual revenue, cost, and profit', responses: { 200: { description: 'Projects' } } },
+      post: { summary: 'Create a customer project with budgets', responses: { 201: { description: 'Project created' } } }
+    },
+    '/projects/{id}': {
+      get: { summary: 'Get project activity and document links', responses: { 200: { description: 'Project' } } },
+      put: { summary: 'Update project details and lifecycle state', responses: { 200: { description: 'Project updated' } } }
+    },
+    '/projects/{id}/activity': { get: { summary: 'List project financial entries and document links', responses: { 200: { description: 'Project activity' } } } },
+    '/projects/{id}/profitability': { get: { summary: 'Calculate project revenue, cost, profit, margin, and budget comparison', responses: { 200: { description: 'Project profitability' } } } },
+    '/projects/{id}/documents': { post: { summary: 'Link a validated invoice, expense, or trade document to a project', responses: { 201: { description: 'Document linked' } } } },
+    '/projects/{id}/documents/{documentId}': { delete: { summary: 'Remove a project document and its generated profitability entry', responses: { 200: { description: 'Document unlinked' } } } },
     '/finance/accounts': {
       get: { summary: 'List tenant chart of accounts with minor-unit balances', responses: { 200: { description: 'Accounts' } } },
       post: { summary: 'Create a chart-of-accounts record', responses: { 201: { description: 'Account created' } } }

@@ -166,6 +166,16 @@ export async function migrateTenantDatabase(database) {
         ['phase7-finance-operations-003', now()]
       );
     }
+    const operationsEngineApplied = await tx.one(
+      'SELECT version FROM migration_versions WHERE version = ?',
+      ['phase7-payment-projects-004']
+    );
+    if (!operationsEngineApplied) {
+      await tx.run(
+        'INSERT INTO migration_versions (version, applied_at) VALUES (?, ?)',
+        ['phase7-payment-projects-004', now()]
+      );
+    }
   });
 }
 
@@ -359,6 +369,17 @@ async function seedDefaultOrganization(hashPassword) {
 async function migrateControlDatabase(database) {
   await database.transaction(async tx => {
     for (const statement of controlSchema(database.dialect)) await tx.run(statement);
+    const applied = await tx.one('SELECT version FROM control_migration_versions WHERE version = ?', ['phase7-operations-rbac-001']);
+    if (!applied) {
+      const managers = await tx.all(`SELECT id, permissions FROM memberships WHERE role = 'manager'`);
+      for (const manager of managers) {
+        let permissions;
+        try { permissions = typeof manager.permissions === 'string' ? JSON.parse(manager.permissions) : manager.permissions; } catch { permissions = []; }
+        const merged = [...new Set([...(Array.isArray(permissions) ? permissions : []), 'projects.*', 'reminders.*'])];
+        await tx.run('UPDATE memberships SET permissions = ?, updated_at = ? WHERE id = ?', [JSON.stringify(merged), now(), manager.id]);
+      }
+      await tx.run('INSERT INTO control_migration_versions (version, applied_at) VALUES (?, ?)', ['phase7-operations-rbac-001', now()]);
+    }
   });
 }
 
@@ -482,6 +503,9 @@ function controlSchema(dialect) {
       id TEXT PRIMARY KEY, organization_id TEXT, actor_user_id TEXT,
       event_type TEXT NOT NULL, request_id TEXT, ip_address TEXT,
       metadata ${jsonType}, created_at TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS control_migration_versions (
+      version TEXT PRIMARY KEY, applied_at TEXT NOT NULL
     )`
   ];
 }
@@ -605,6 +629,13 @@ function tenantSchema(dialect) {
       created_by TEXT NOT NULL, created_at TEXT NOT NULL,
       CHECK (entry_type IN ('REVENUE', 'COST')),
       CHECK (amount_minor > 0)
+    )`,
+    `CREATE TABLE IF NOT EXISTS project_documents (
+      id ${id}, project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+      entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, relationship_type TEXT NOT NULL DEFAULT 'related',
+      created_by TEXT NOT NULL, created_at TEXT NOT NULL,
+      CHECK (entity_type IN ('invoice', 'trade_document', 'expense')),
+      UNIQUE (project_id, entity_type, entity_id)
     )`,
     `CREATE TABLE IF NOT EXISTS reminders (
       id ${id}, reminder_type TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
@@ -1060,6 +1091,8 @@ function tenantSchema(dialect) {
     `CREATE INDEX IF NOT EXISTS idx_payment_links_invoice ON payment_links(invoice_id, status)`,
     `CREATE INDEX IF NOT EXISTS idx_reminders_schedule ON reminders(status, scheduled_at)`,
     `CREATE INDEX IF NOT EXISTS idx_project_entries_project ON project_entries(project_id, occurred_at)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_project_entries_source ON project_entries(project_id, entry_type, source_type, source_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_project_documents_project ON project_documents(project_id, created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_refunds_invoice ON refunds(invoice_id, created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_document_jobs_status ON document_generation_jobs(status, available_at)`,
     `CREATE INDEX IF NOT EXISTS idx_document_links_source ON document_links(source_entity_type, source_entity_id)`,
@@ -1705,7 +1738,7 @@ async function withSqliteLock(key, work) {
 function rolePermissions(role) {
   const map = {
     admin: ['*'],
-    manager: ['dashboard.read', 'products.*', 'inventory.*', 'trade.*', 'parties.*', 'payments.*', 'approvals.*', 'ai.*', 'barcode.*', 'finance.*', 'reports.read'],
+    manager: ['dashboard.read', 'products.*', 'inventory.*', 'trade.*', 'parties.*', 'payments.*', 'approvals.*', 'ai.*', 'barcode.*', 'finance.*', 'projects.*', 'reminders.*', 'reports.read'],
     cashier: [
       'dashboard.read', 'products.read', 'inventory.read', 'trade.sales.*',
       'parties.customers.*', 'payments.create', 'ai.read',

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inventia Payment Request</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="workspace-page" style="max-width:760px;margin:48px auto;padding:20px;">
+    <section class="grid-panel" aria-live="polite">
+      <div class="panel-title-row">
+        <div><p class="eyebrow">Inventia secure request</p><h1>Payment Request</h1><p id="paymentRequestState">Validating this request…</p></div>
+      </div>
+      <div id="paymentRequestDetails" class="workspace-detail-grid" hidden></div>
+    </section>
+  </main>
+  <script>
+    (async function () {
+      const parts = location.pathname.split('/').filter(Boolean);
+      const state = document.getElementById('paymentRequestState');
+      const details = document.getElementById('paymentRequestDetails');
+      try {
+        const response = await fetch(`/api/v1/payment-links/public/${encodeURIComponent(parts[1])}/${encodeURIComponent(parts[2])}`);
+        const request = await response.json();
+        if (!response.ok) throw new Error(request?.error?.message || 'This payment request could not be found.');
+        state.textContent = request.next_step;
+        details.hidden = false;
+        details.innerHTML = `
+          <div><span>Invoice</span><strong>${escapeHtml(request.invoice_number)}</strong></div>
+          <div><span>Customer</span><strong>${escapeHtml(request.customer_name)}</strong></div>
+          <div><span>Amount</span><strong>${new Intl.NumberFormat('en-IN', { style: 'currency', currency: request.currency }).format(request.amount)}</strong></div>
+          <div><span>Status</span><span class="status-badge ${escapeHtml(request.status.toLowerCase())}">${escapeHtml(request.status)}</span></div>
+          <div><span>Expires</span><strong>${new Date(request.expires_at).toLocaleString('en-IN')}</strong></div>`;
+      } catch (error) {
+        state.textContent = error.message;
+      }
+      function escapeHtml(value) {
+        return String(value || '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
+      }
+    })();
+  </script>
+</body>
+</html>

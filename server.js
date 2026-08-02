@@ -64,6 +64,9 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use(express.static('public'));
+app.get('/pay/:organizationId/:token', (_req, res) => {
+  res.sendFile(path.join(APP_DIRECTORY, 'public', 'payment.html'));
+});
 app.use('/uploads/invoices', (_req, res) => {
   res.status(404).json({ error: 'not_found', message: 'Invoice files require an authenticated invoice PDF endpoint.' });
 });

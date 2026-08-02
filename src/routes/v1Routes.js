@@ -145,6 +145,25 @@ import {
   postBankTransaction,
   reconcileBankTransaction
 } from '../services/financeOperationsService.js';
+import {
+  cancelPaymentLink,
+  cancelReminder,
+  createPaymentLink,
+  createProject,
+  createReminder,
+  getProject,
+  linkProjectDocument,
+  listPaymentLinks,
+  listProjects,
+  listReminders,
+  listTenantNotifications,
+  markNotificationRead,
+  processDueReminders,
+  projectProfitability,
+  resolvePublicPaymentLink,
+  unlinkProjectDocument,
+  updateProject
+} from '../services/businessOperationsService.js';
 
 const router = express.Router();
 const upload = multer({
@@ -423,6 +442,39 @@ const expenseSchema = z.object({
   status: z.enum(['DRAFT', 'POSTED', 'PAID']).default('DRAFT'),
   project_id: z.coerce.number().int().positive().optional()
 });
+const paymentLinkSchema = z.object({
+  invoice_id: z.coerce.number().int().positive(),
+  amount: z.coerce.number().positive().optional(),
+  expires_at: z.string().datetime()
+});
+const reminderSchema = z.object({
+  reminder_type: z.string().trim().min(1).max(100),
+  entity_type: z.enum(['invoice', 'customer', 'supplier', 'project', 'trade_document']),
+  entity_id: z.union([z.string().trim().min(1).max(100), z.coerce.number().int().positive()]),
+  recipient_type: z.enum(['user', 'customer', 'supplier', 'organization']),
+  recipient_id: z.string().trim().max(100).optional(),
+  channel: z.enum(['IN_APP', 'EMAIL', 'SMS', 'WHATSAPP']).default('IN_APP'),
+  scheduled_at: z.string().datetime(),
+  subject: z.string().trim().max(300).optional(),
+  message: z.string().trim().min(1).max(5000)
+});
+const projectSchema = z.object({
+  name: z.string().trim().min(1).max(300),
+  customer_id: z.coerce.number().int().positive().optional(),
+  status: z.enum(['PLANNED', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED']).default('PLANNED'),
+  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  budget_revenue: z.coerce.number().nonnegative().default(0),
+  budget_cost: z.coerce.number().nonnegative().default(0),
+  description: z.string().trim().max(5000).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional()
+});
+const projectUpdateSchema = projectSchema.partial();
+const projectDocumentSchema = z.object({
+  entity_type: z.enum(['invoice', 'trade_document', 'expense']),
+  entity_id: z.union([z.string().trim().min(1).max(100), z.coerce.number().int().positive()]),
+  relationship_type: z.string().trim().min(1).max(100).default('related')
+});
 
 router.post('/auth/login', validate(loginSchema), asyncRoute(async (req, res) => {
   const result = await loginPlatform({
@@ -445,6 +497,11 @@ router.post('/auth/refresh', validate(refreshSchema), asyncRoute(async (req, res
 router.post('/auth/logout', validate(refreshSchema), asyncRoute(async (req, res) => {
   await logoutPlatformSession(req.body.refresh_token);
   res.status(204).end();
+}));
+
+router.get('/payment-links/public/:organizationId/:token', asyncRoute(async (req, res) => {
+  const tenantDb = await getTenantDatabase(req.params.organizationId);
+  res.json(await resolvePublicPaymentLink(tenantDb, req.params.token));
 }));
 
 router.use(authenticateV1);
@@ -1244,6 +1301,62 @@ router.get('/finance/reconciliation', requirePermission('finance.read'), asyncRo
 router.get('/payments/timeline', requirePermission('finance.read'), asyncRoute(async (req, res) => {
   res.json({ timeline: await paymentTimeline(req.tenantDb, req.query) });
 }));
+router.get('/payment-links', requirePermission('finance.read'), asyncRoute(async (req, res) => {
+  res.json({ payment_links: await listPaymentLinks(req.tenantDb, req.query) });
+}));
+router.post('/payment-links', requirePermission('finance.manage'), validate(paymentLinkSchema), mutation(async req => ({
+  status: 201, body: await createPaymentLink(req.tenantDb, req.body, req)
+})));
+router.post('/payment-links/:id/cancel', requirePermission('finance.manage'), validate(z.object({})), mutation(async req => ({
+  body: await cancelPaymentLink(req.tenantDb, req.params.id, req)
+})));
+
+router.get('/reminders', requirePermission('reminders.read'), asyncRoute(async (req, res) => {
+  res.json({ reminders: await listReminders(req.tenantDb, req.query) });
+}));
+router.post('/reminders', requirePermission('reminders.manage'), validate(reminderSchema), mutation(async req => ({
+  status: 201, body: await createReminder(req.tenantDb, req.body, req)
+})));
+router.post('/reminders/:id/cancel', requirePermission('reminders.manage'), validate(z.object({})), mutation(async req => ({
+  body: await cancelReminder(req.tenantDb, req.params.id, req)
+})));
+router.post('/reminders/process-due', requirePermission('reminders.manage'), validate(z.object({
+  limit: z.coerce.number().int().min(1).max(500).optional()
+})), mutation(async req => ({
+  body: { results: await processDueReminders(req.tenantDb, req.user.organization_id, req.body.limit) }
+})));
+router.get('/notifications', requirePermission('dashboard.read'), asyncRoute(async (req, res) => {
+  res.json({ notifications: await listTenantNotifications(req.tenantDb, req.user.tenant_user_id || req.user.id) });
+}));
+router.post('/notifications/:id/read', requirePermission('dashboard.read'), validate(z.object({})), mutation(async req => ({
+  body: await markNotificationRead(req.tenantDb, req.params.id, req.user.tenant_user_id || req.user.id)
+})));
+
+router.get('/projects', requirePermission('projects.read'), asyncRoute(async (req, res) => {
+  res.json({ projects: await listProjects(req.tenantDb, req.query) });
+}));
+router.post('/projects', requirePermission('projects.manage'), validate(projectSchema), mutation(async req => ({
+  status: 201, body: await createProject(req.tenantDb, req.body, req)
+})));
+router.get('/projects/:id', requirePermission('projects.read'), asyncRoute(async (req, res) => {
+  res.json(await getProject(req.tenantDb, req.params.id));
+}));
+router.put('/projects/:id', requirePermission('projects.manage'), validate(projectUpdateSchema), mutation(async req => ({
+  body: await updateProject(req.tenantDb, req.params.id, req.body, req)
+})));
+router.get('/projects/:id/activity', requirePermission('projects.read'), asyncRoute(async (req, res) => {
+  const project = await getProject(req.tenantDb, req.params.id);
+  res.json({ entries: project.entries, documents: project.documents });
+}));
+router.get('/projects/:id/profitability', requirePermission('projects.read'), asyncRoute(async (req, res) => {
+  res.json(await projectProfitability(req.tenantDb, req.params.id));
+}));
+router.post('/projects/:id/documents', requirePermission('projects.manage'), validate(projectDocumentSchema), mutation(async req => ({
+  status: 201, body: await linkProjectDocument(req.tenantDb, req.params.id, req.body, req)
+})));
+router.delete('/projects/:id/documents/:documentId', requirePermission('projects.manage'), mutation(async req => ({
+  body: await unlinkProjectDocument(req.tenantDb, req.params.id, req.params.documentId, req)
+})));
 
 router.get('/dashboard/summary', requirePermission('dashboard.read'), asyncRoute(async (req, res) => {
   res.json(await dashboardSummary(req.tenantDb, req.user.organization_id, req.query.refresh === 'true'));
