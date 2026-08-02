@@ -119,6 +119,17 @@ export async function migrateTenantDatabase(database) {
         ['phase5-barcode-labels-003', now()]
       );
     }
+    const settingsFoundationApplied = await tx.one(
+      'SELECT version FROM migration_versions WHERE version = ?',
+      ['phase6-settings-foundation-001']
+    );
+    if (!settingsFoundationApplied) {
+      await seedSettingsFoundationDefaults(tx);
+      await tx.run(
+        'INSERT INTO migration_versions (version, applied_at) VALUES (?, ?)',
+        ['phase6-settings-foundation-001', now()]
+      );
+    }
   });
 }
 
@@ -684,6 +695,11 @@ function tenantSchema(dialect) {
       setting_key TEXT PRIMARY KEY, setting_value ${json} NOT NULL,
       updated_by TEXT, updated_at TEXT NOT NULL
     )`,
+    `CREATE TABLE IF NOT EXISTS feature_flags (
+      flag_key TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0,
+      configuration ${json} NOT NULL, updated_by TEXT, updated_at TEXT NOT NULL,
+      CHECK (enabled IN (0, 1))
+    )`,
     `CREATE TABLE IF NOT EXISTS payment_method_settings (
       method TEXT PRIMARY KEY, label TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
       requires_reference INTEGER NOT NULL DEFAULT 0,
@@ -956,6 +972,26 @@ function tenantSchema(dialect) {
     `CREATE INDEX IF NOT EXISTS idx_barcode_scans_value_date
       ON barcode_scan_events(barcode_value, created_at)`
   ];
+}
+
+async function seedSettingsFoundationDefaults(tx) {
+  const timestamp = now();
+  const defaults = [
+    ['frontend_modules', 1],
+    ['settings_namespaces', 1],
+    ['navigation_v2', 0],
+    ['trade_workspaces', 0],
+    ['notifications_v2', 0]
+  ];
+  for (const [key, enabled] of defaults) {
+    await tx.run(
+      `INSERT INTO feature_flags
+        (flag_key, enabled, configuration, updated_by, updated_at)
+       VALUES (?, ?, ?, NULL, ?)
+       ON CONFLICT (flag_key) DO NOTHING`,
+      [key, enabled, JSON.stringify({}), timestamp]
+    );
+  }
 }
 
 async function seedBarcodeLabelDefaults(tx) {

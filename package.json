@@ -10,6 +10,7 @@
     "worker": "node src/workers/phase5Worker.js",
     "check": "node scripts/check-phase5.js",
     "test": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
     "migrate:dry-run": "node scripts/migrate-phase5.js",
     "migrate:apply": "node scripts/migrate-phase5.js --apply"
   },
@@ -38,6 +39,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "brace-expansion": "^5.0.8",
     "nodemon": "^3.1.0"
   }

@@ -117,6 +117,7 @@ import {
   validateBarcodeInput,
   ensureProductBarcodesTx
 } from '../services/barcodeLabelService.js';
+import settingsFoundationRoutes from './v1/settingsRoutes.js';
 
 const router = express.Router();
 const upload = multer({
@@ -1155,6 +1156,10 @@ router.put('/settings/payment-methods', requirePermission('payments.configure'),
 })), mutation(async req => ({
   body: await updatePaymentMethods(req.tenantDb, req.body.methods, req)
 })));
+
+// Concrete payment-method settings stay above the namespace router so the
+// generic /settings/:namespace route cannot shadow them.
+router.use(settingsFoundationRoutes);
 
 router.get('/search', requirePermission('dashboard.read'), asyncRoute(async (req, res) => {
   const query = String(req.query.q || '').trim();

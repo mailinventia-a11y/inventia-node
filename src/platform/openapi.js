@@ -2,8 +2,8 @@ export const phase5OpenApi = {
   openapi: '3.1.0',
   info: {
     title: 'Inventia Enterprise Core Trade API',
-    version: '5.1.0',
-    description: 'Tenant-isolated products, inventory, trade, GST invoices, unified payments, barcodes, labels, dashboard, and payment APIs.'
+    version: '6.0.0',
+    description: 'Tenant-isolated products, inventory, trade, GST invoices, unified payments, barcodes, labels, dashboard, settings namespaces, and feature-flag APIs.'
   },
   servers: [{ url: '/api/v1' }],
   components: {
@@ -49,6 +49,30 @@ export const phase5OpenApi = {
           allow_partial_payment: { type: 'boolean' },
           due_date: { type: 'string', format: 'date' },
           invoice_details: { type: 'object' }
+        }
+      },
+      SettingsNamespace: {
+        type: 'object',
+        required: ['namespace', 'settings'],
+        properties: {
+          namespace: {
+            type: 'string',
+            enum: ['organization', 'documents', 'pos', 'inventory', 'notifications', 'communications', 'ai']
+          },
+          settings: { type: 'object', additionalProperties: true },
+          updated_by: { type: ['string', 'null'] },
+          updated_at: { type: ['string', 'null'], format: 'date-time' }
+        }
+      },
+      FeatureFlag: {
+        type: 'object',
+        required: ['key', 'enabled', 'configuration'],
+        properties: {
+          key: { type: 'string' },
+          enabled: { type: 'boolean' },
+          configuration: { type: 'object', additionalProperties: true },
+          updated_by: { type: ['string', 'null'] },
+          updated_at: { type: ['string', 'null'], format: 'date-time' }
         }
       }
     }
@@ -116,6 +140,62 @@ export const phase5OpenApi = {
     '/settings/payment-methods': {
       get: { summary: 'List enabled payment methods and policies', responses: { 200: { description: 'Payment methods' } } },
       put: { summary: 'Configure organization payment methods', responses: { 200: { description: 'Updated methods' } } }
+    },
+    '/settings': {
+      get: {
+        summary: 'List all tenant settings namespaces with safe defaults',
+        responses: { 200: { description: 'Settings namespaces' } }
+      }
+    },
+    '/settings/{namespace}': {
+      get: {
+        summary: 'Read one tenant settings namespace',
+        parameters: [{
+          name: 'namespace',
+          in: 'path',
+          required: true,
+          schema: {
+            type: 'string',
+            enum: ['organization', 'documents', 'pos', 'inventory', 'notifications', 'communications', 'ai']
+          }
+        }],
+        responses: { 200: { description: 'Settings namespace' }, 404: { description: 'Unknown namespace' } }
+      },
+      put: {
+        summary: 'Validate and update one tenant settings namespace',
+        security: [{ bearerAuth: [], idempotencyKey: [] }],
+        parameters: [{
+          name: 'namespace',
+          in: 'path',
+          required: true,
+          schema: {
+            type: 'string',
+            enum: ['organization', 'documents', 'pos', 'inventory', 'notifications', 'communications', 'ai']
+          }
+        }],
+        responses: {
+          200: { description: 'Settings updated' },
+          400: { description: 'Idempotency key required' },
+          403: { description: 'Permission denied' },
+          422: { description: 'Invalid settings payload' }
+        }
+      }
+    },
+    '/feature-flags': {
+      get: {
+        summary: 'List organization feature flags used for controlled rollout',
+        responses: { 200: { description: 'Feature flags' } }
+      }
+    },
+    '/feature-flags/{key}': {
+      put: {
+        summary: 'Update an approved organization feature flag',
+        security: [{ bearerAuth: [], idempotencyKey: [] }],
+        responses: {
+          200: { description: 'Feature flag updated' },
+          404: { description: 'Unknown feature flag' }
+        }
+      }
     },
     '/payments/razorpay/orders': { post: { summary: 'Create a Razorpay order', responses: { 201: { description: 'Order created' }, 503: { description: 'Integration not configured' } } } },
     '/webhooks/razorpay': { post: { security: [], summary: 'Receive a signed Razorpay webhook', responses: { 202: { description: 'Accepted' } } } }

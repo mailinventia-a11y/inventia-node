@@ -88,3 +88,5 @@ uploads/tenant-files/
 uploads/invoices/
 tmp/
 test-results/
+playwright-report/
+.e2e-data/

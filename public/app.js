@@ -1005,6 +1005,7 @@ async function logout() {
     }).catch(() => {});
   }
   localStorage.clear();
+  window.dispatchEvent(new CustomEvent('inventia:session-changed', { detail: { authenticated: false } }));
   
   // Show Login Overlay
   const loginContainer = document.getElementById('loginContainer');
@@ -1169,7 +1170,14 @@ function savePhase5Session(session) {
     localStorage.setItem('username', session.user.username);
     localStorage.setItem('fullName', session.user.full_name);
     localStorage.setItem('role', session.user.role);
+    localStorage.setItem('permissions', JSON.stringify(session.user.permissions || []));
   }
+  window.dispatchEvent(new CustomEvent('inventia:session-changed', {
+    detail: {
+      authenticated: true,
+      organizationId: session.organization?.id || localStorage.getItem('activeOrganizationId')
+    }
+  }));
 }
 
 async function loadOrganizationMenu() {
