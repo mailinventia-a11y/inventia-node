@@ -151,6 +151,29 @@ export const phase5OpenApi = {
     '/invoices/{id}/payments': { post: { summary: 'Collect one or more payments against an outstanding invoice', responses: { 201: { description: 'Collection recorded' } } } },
     '/payment-allocations/{id}/confirm': { post: { summary: 'Confirm an authorized pending manual allocation', responses: { 200: { description: 'Allocation confirmed' } } } },
     '/payment-allocations/{id}/refunds': { post: { summary: 'Refund a successful manual allocation', responses: { 201: { description: 'Refund recorded' } } } },
+    '/payments/timeline': { get: { summary: 'Canonical invoice, payment, refund, and payment-link timeline', responses: { 200: { description: 'Payment timeline' } } } },
+    '/finance/accounts': {
+      get: { summary: 'List tenant chart of accounts with minor-unit balances', responses: { 200: { description: 'Accounts' } } },
+      post: { summary: 'Create a chart-of-accounts record', responses: { 201: { description: 'Account created' } } }
+    },
+    '/finance/accounts/{id}/ledger': { get: { summary: 'Get immutable double-entry account ledger', responses: { 200: { description: 'Account ledger' } } } },
+    '/finance/journals': {
+      get: { summary: 'List posted journals', responses: { 200: { description: 'Journals' } } },
+      post: { summary: 'Post an exactly balanced minor-unit journal', responses: { 201: { description: 'Journal posted' }, 422: { description: 'Journal is not balanced' } } }
+    },
+    '/finance/journals/{id}': { get: { summary: 'Get a journal and its entries', responses: { 200: { description: 'Journal' } } } },
+    '/finance/banks': {
+      get: { summary: 'List tenant bank accounts', responses: { 200: { description: 'Bank accounts' } } },
+      post: { summary: 'Create a masked bank account linked to the chart of accounts', responses: { 201: { description: 'Bank account created' } } }
+    },
+    '/finance/banks/{id}/transactions': { post: { summary: 'Post a double-entry bank transaction', responses: { 201: { description: 'Bank transaction posted' } } } },
+    '/finance/bank-transactions/{id}/reconcile': { post: { summary: 'Reconcile a bank transaction once', responses: { 200: { description: 'Transaction reconciled' }, 409: { description: 'Already reconciled' } } } },
+    '/finance/expenses': {
+      get: { summary: 'List tenant expenses', responses: { 200: { description: 'Expenses' } } },
+      post: { summary: 'Create a draft, posted, or paid expense with balanced accounting', responses: { 201: { description: 'Expense created' } } }
+    },
+    '/finance/summary': { get: { summary: 'Accounting-backed finance summary', responses: { 200: { description: 'Finance summary' } } } },
+    '/finance/reconciliation': { get: { summary: 'Compare invoices, collections, refunds, customer ledger, accounts receivable, and bank balances', responses: { 200: { description: 'Reconciliation state' } } } },
     '/settings/payment-methods': {
       get: { summary: 'List enabled payment methods and policies', responses: { 200: { description: 'Payment methods' } } },
       put: { summary: 'Configure organization payment methods', responses: { 200: { description: 'Updated methods' } } }

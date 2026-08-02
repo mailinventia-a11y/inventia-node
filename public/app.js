@@ -4986,16 +4986,16 @@ let financeAccounts = [];
 async function loadFinanceWorkspace() {
   try {
     const [summaryResponse, accountsResponse, journalsResponse] = await Promise.all([
-      fetch('/api/finance/summary', { headers: getAuthHeaders() }),
-      fetch('/api/accounts', { headers: getAuthHeaders() }),
-      fetch('/api/journals', { headers: getAuthHeaders() })
+      fetch('/api/v1/finance/summary', { headers: getAuthHeaders() }),
+      fetch('/api/v1/finance/accounts', { headers: getAuthHeaders() }),
+      fetch('/api/v1/finance/journals', { headers: getAuthHeaders() })
     ]);
     if (!summaryResponse.ok || !accountsResponse.ok || !journalsResponse.ok) {
       throw new Error('Finance data could not be loaded.');
     }
     const summary = await summaryResponse.json();
-    financeAccounts = await accountsResponse.json();
-    const journals = await journalsResponse.json();
+    financeAccounts = (await accountsResponse.json()).accounts || [];
+    const journals = (await journalsResponse.json()).journals || [];
     setFinanceMoney('financeIncome', summary.total_income);
     setFinanceMoney('financeExpenses', summary.total_expenses);
     setFinanceMoney('financeProfit', summary.net_profit);
@@ -5021,7 +5021,7 @@ function renderFinanceAccounts(accounts) {
       <td><strong>${escapeHtml(account.code)}</strong></td>
       <td>${escapeHtml(account.name)}</td>
       <td><span class="status-badge ${account.account_type === 'income' ? 'completed' : ''}">${escapeHtml(account.account_type)}</span></td>
-      <td>${currencySymbol}${Number(account.opening_balance || 0).toFixed(2)}</td>
+      <td>${currencySymbol}${Number(account.presentation_balance ?? account.balance ?? 0).toFixed(2)}</td>
     </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;">No accounts found.</td></tr>';
 }
 
@@ -5062,7 +5062,7 @@ async function submitFinanceJournal(event) {
   const debitAccount = Number(document.getElementById('financeDebitAccount').value);
   const creditAccount = Number(document.getElementById('financeCreditAccount').value);
   if (debitAccount === creditAccount) return showToast('Debit and credit accounts must be different.', 'error');
-  const response = await fetch('/api/journals', {
+  const response = await fetch('/api/v1/finance/journals', {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify({
@@ -5077,7 +5077,7 @@ async function submitFinanceJournal(event) {
     })
   });
   const result = await response.json();
-  if (!response.ok) return showToast(result.error || 'Unable to post journal.', 'error');
+  if (!response.ok) return showToast(result.error?.message || result.error || 'Unable to post journal.', 'error');
   document.getElementById('financeJournalForm').reset();
   closeFinanceJournalModal();
   await loadFinanceWorkspace();
@@ -5091,13 +5091,13 @@ async function createFinanceAccount() {
   if (!name) return;
   const accountType = window.prompt('Account type: asset, liability, income, expense, or equity', 'expense')?.toLowerCase();
   if (!accountType) return;
-  const response = await fetch('/api/accounts', {
+  const response = await fetch('/api/v1/finance/accounts', {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify({ code, name, account_type: accountType })
   });
   const result = await response.json();
-  if (!response.ok) return showToast(result.error || 'Unable to create account.', 'error');
+  if (!response.ok) return showToast(result.error?.message || result.error || 'Unable to create account.', 'error');
   await loadFinanceWorkspace();
   showToast(`Account ${result.code} created.`, 'success');
 }

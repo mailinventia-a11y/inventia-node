@@ -122,6 +122,9 @@ export const FEATURE_FLAG_DEFAULTS = Object.freeze({
   navigation_v2: { enabled: false, configuration: {} },
   trade_workspaces: { enabled: false, configuration: {} },
   document_engine_v2: { enabled: false, configuration: {} },
+  finance_v2: { enabled: false, configuration: {} },
+  reminders_v2: { enabled: false, configuration: {} },
+  projects_v2: { enabled: false, configuration: {} },
   notifications_v2: { enabled: false, configuration: {} }
 });
 

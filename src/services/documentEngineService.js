@@ -10,6 +10,7 @@ import {
   receivePurchaseOrder
 } from './enterpriseTradeService.js';
 import { fromMinor, toMinor } from './moneyService.js';
+import { postFiscalAdjustmentAccountingTx } from './financeOperationsService.js';
 
 const CONVERSION_ROUTES = Object.freeze({
   sales_order: 'sales-orders',
@@ -270,6 +271,7 @@ export async function transitionFiscalAdjustment(db, id, action, input, req) {
         );
       }
       await tx.run(`UPDATE fiscal_adjustments SET status = 'ISSUED', issued_by = ?, issued_at = ?, updated_at = ? WHERE id = ?`, [actorId, now(), now(), id]);
+      await postFiscalAdjustmentAccountingTx(tx, before, actorId);
       await writeTimeline(tx, id, 'issued', actorId, `${before.adjustment_number} issued.`);
     });
     if (before.invoice_id) await calculateInvoicePaymentState(db, before.invoice_id);

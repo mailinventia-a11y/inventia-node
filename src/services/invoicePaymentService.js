@@ -11,6 +11,7 @@ import { createInvoiceStorageAdapter } from '../platform/storageAdapter.js';
 import { fromMinor, minorToFixed, positiveDecimal, toMinor } from './moneyService.js';
 import { numberToWords } from './numberToWords.js';
 import { generatePDFBuffer } from './pdfService.js';
+import { postPaymentAccountingTx, postRefundAccountingTx } from './financeOperationsService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const invoiceStorage = createInvoiceStorageAdapter();
@@ -456,6 +457,7 @@ export async function collectInvoicePayment(db, invoiceId, input, req) {
       req,
       existingOutstanding: true
     });
+    for (const allocation of paymentResult.allocations) await postPaymentAccountingTx(tx, allocation, actorId);
     for (const allocation of paymentResult.allocations.filter(item => item.status === 'SUCCESS' && customer)) {
       await appendCustomerLedgerTx(tx, {
         customerId: customer.id,
@@ -549,6 +551,7 @@ export async function confirmPaymentAllocation(db, allocationId, req) {
         });
       }
     }
+    await postPaymentAccountingTx(tx, { ...allocation, id: Number(allocationId), status: 'SUCCESS' }, actorId);
     return allocation;
   });
   const paymentSummary = await calculateInvoicePaymentState(db, result.invoice_id);
@@ -612,7 +615,9 @@ export async function refundPaymentAllocation(db, allocationId, input, req) {
         actorId
       });
     }
-    return { refund_id: refundId, refund_number: refundNumber, invoice_id: allocation.invoice_id, amount_minor: amountMinor };
+    const refund = { refund_id: refundId, refund_number: refundNumber, invoice_id: allocation.invoice_id, amount_minor: amountMinor };
+    await postRefundAccountingTx(tx, refund, allocation, actorId);
+    return refund;
   });
   const paymentSummary = await calculateInvoicePaymentState(db, result.invoice_id);
   await writeTenantAudit(db, req, {

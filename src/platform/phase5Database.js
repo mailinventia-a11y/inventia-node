@@ -87,6 +87,7 @@ export async function migrateTenantDatabase(database) {
   await database.transaction(async tx => {
     await prepareInvoicePaymentLegacyTables(tx);
     await prepareBarcodeLabelLegacyTables(tx);
+    await prepareFinanceOperationsLegacyTables(tx);
     for (const statement of tenantSchema(database.dialect)) await tx.run(statement);
     const applied = await tx.one('SELECT version FROM migration_versions WHERE version = ?', ['phase5-core-001']);
     if (!applied) {
@@ -145,6 +146,26 @@ export async function migrateTenantDatabase(database) {
         ['phase6-document-engine-002', now()]
       );
     }
+    const financeEngineApplied = await tx.one(
+      'SELECT version FROM migration_versions WHERE version = ?',
+      ['phase7-finance-operations-003']
+    );
+    if (!financeEngineApplied) {
+      const accountColumns = await tableColumns(tx, 'accounts');
+      const accountAdditions = [
+        ['parent_id', 'INTEGER'], ['opening_balance_minor', 'INTEGER NOT NULL DEFAULT 0'],
+        ['currency', "TEXT NOT NULL DEFAULT 'INR'"], ['merged_into_id', 'INTEGER'],
+        ['updated_at', 'TEXT']
+      ];
+      for (const [column, definition] of accountAdditions) {
+        if (!accountColumns.includes(column)) await tx.run(`ALTER TABLE accounts ADD COLUMN ${column} ${definition}`);
+      }
+      await seedFinanceOperationsDefaults(tx);
+      await tx.run(
+        'INSERT INTO migration_versions (version, applied_at) VALUES (?, ?)',
+        ['phase7-finance-operations-003', now()]
+      );
+    }
   });
 }
 
@@ -191,6 +212,23 @@ async function prepareInvoicePaymentLegacyTables(tx) {
         `Both ${table} and ${legacyTable} use legacy schemas; manual migration is required.`
       );
     }
+  }
+}
+
+async function prepareFinanceOperationsLegacyTables(tx) {
+  const canonicalColumns = {
+    journals: 'total_debit_minor',
+    journal_entries: 'debit_minor',
+    bank_transactions: 'reconciliation_status',
+    expenses: 'total_minor'
+  };
+  for (const [table, requiredColumn] of Object.entries(canonicalColumns)) {
+    const columns = await tableColumns(tx, table);
+    if (!columns.length || columns.includes(requiredColumn)) continue;
+    const legacyTable = `legacy_${table}_phase6`;
+    const legacyColumns = await tableColumns(tx, legacyTable);
+    if (!legacyColumns.length) await tx.run(`ALTER TABLE ${table} RENAME TO ${legacyTable}`);
+    else throw platformError(409, 'legacy_finance_schema_conflict', `Both ${table} and ${legacyTable} use legacy finance schemas; manual migration is required.`);
   }
 }
 
@@ -496,8 +534,87 @@ function tenantSchema(dialect) {
     )`,
     `CREATE TABLE IF NOT EXISTS accounts (
       id ${id}, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
-      account_type TEXT NOT NULL, opening_balance REAL DEFAULT 0,
-      is_archived INTEGER DEFAULT 0, created_at TEXT
+      account_type TEXT NOT NULL, parent_id INTEGER, opening_balance REAL DEFAULT 0,
+      opening_balance_minor INTEGER NOT NULL DEFAULT 0, currency TEXT NOT NULL DEFAULT 'INR',
+      is_archived INTEGER DEFAULT 0, merged_into_id INTEGER, created_at TEXT, updated_at TEXT
+    )`,
+    `CREATE TABLE IF NOT EXISTS journals (
+      id ${id}, journal_no TEXT UNIQUE NOT NULL, journal_type TEXT NOT NULL DEFAULT 'GENERAL',
+      journal_date TEXT NOT NULL, reference TEXT, description TEXT,
+      source_type TEXT, source_id TEXT, status TEXT NOT NULL DEFAULT 'POSTED',
+      total_debit_minor INTEGER NOT NULL, total_credit_minor INTEGER NOT NULL,
+      reversal_of_id INTEGER REFERENCES journals(id) ON DELETE RESTRICT,
+      idempotency_key TEXT UNIQUE, created_by TEXT NOT NULL, created_at TEXT NOT NULL,
+      UNIQUE (source_type, source_id, journal_type),
+      CHECK (status IN ('POSTED', 'REVERSED')),
+      CHECK (total_debit_minor > 0 AND total_debit_minor = total_credit_minor)
+    )`,
+    `CREATE TABLE IF NOT EXISTS journal_entries (
+      id ${id}, journal_id INTEGER NOT NULL REFERENCES journals(id) ON DELETE RESTRICT,
+      account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
+      debit_minor INTEGER NOT NULL DEFAULT 0, credit_minor INTEGER NOT NULL DEFAULT 0,
+      party_type TEXT, party_id INTEGER, project_id INTEGER, description TEXT,
+      created_at TEXT NOT NULL,
+      CHECK (debit_minor >= 0 AND credit_minor >= 0),
+      CHECK ((debit_minor > 0 AND credit_minor = 0) OR (credit_minor > 0 AND debit_minor = 0))
+    )`,
+    `CREATE TABLE IF NOT EXISTS bank_accounts (
+      id ${id}, account_id INTEGER NOT NULL UNIQUE REFERENCES accounts(id) ON DELETE RESTRICT,
+      name TEXT NOT NULL, account_number_masked TEXT NOT NULL, ifsc TEXT, upi_id TEXT,
+      opening_balance_minor INTEGER NOT NULL DEFAULT 0, current_balance_minor INTEGER NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'INR', status TEXT NOT NULL DEFAULT 'active',
+      created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (status IN ('active', 'inactive'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS bank_transactions (
+      id ${id}, bank_account_id INTEGER NOT NULL REFERENCES bank_accounts(id) ON DELETE RESTRICT,
+      journal_id INTEGER NOT NULL REFERENCES journals(id) ON DELETE RESTRICT,
+      direction TEXT NOT NULL, amount_minor INTEGER NOT NULL, method TEXT,
+      reference TEXT, description TEXT, transaction_date TEXT NOT NULL,
+      reconciliation_status TEXT NOT NULL DEFAULT 'UNRECONCILED',
+      reconciled_at TEXT, reconciled_by TEXT, idempotency_key TEXT UNIQUE,
+      created_at TEXT NOT NULL,
+      CHECK (direction IN ('IN', 'OUT')),
+      CHECK (amount_minor > 0),
+      CHECK (reconciliation_status IN ('UNRECONCILED', 'RECONCILED'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS expenses (
+      id ${id}, expense_no TEXT UNIQUE NOT NULL, supplier_id INTEGER REFERENCES suppliers(id),
+      expense_account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
+      payment_account_id INTEGER REFERENCES accounts(id) ON DELETE RESTRICT,
+      subtotal_minor INTEGER NOT NULL, tax_minor INTEGER NOT NULL DEFAULT 0,
+      total_minor INTEGER NOT NULL, expense_date TEXT NOT NULL, description TEXT,
+      reference TEXT, status TEXT NOT NULL DEFAULT 'DRAFT', journal_id INTEGER REFERENCES journals(id),
+      project_id INTEGER, idempotency_key TEXT UNIQUE, created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (status IN ('DRAFT', 'POSTED', 'PAID', 'VOID')),
+      CHECK (subtotal_minor >= 0 AND tax_minor >= 0 AND total_minor > 0)
+    )`,
+    `CREATE TABLE IF NOT EXISTS projects (
+      id ${id}, project_no TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
+      customer_id INTEGER REFERENCES customers(id), status TEXT NOT NULL DEFAULT 'PLANNED',
+      start_date TEXT, end_date TEXT, budget_revenue_minor INTEGER NOT NULL DEFAULT 0,
+      budget_cost_minor INTEGER NOT NULL DEFAULT 0, description TEXT, metadata ${json},
+      created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (status IN ('PLANNED', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS project_entries (
+      id ${id}, project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+      entry_type TEXT NOT NULL, source_type TEXT NOT NULL, source_id TEXT,
+      amount_minor INTEGER NOT NULL, occurred_at TEXT NOT NULL, description TEXT,
+      created_by TEXT NOT NULL, created_at TEXT NOT NULL,
+      CHECK (entry_type IN ('REVENUE', 'COST')),
+      CHECK (amount_minor > 0)
+    )`,
+    `CREATE TABLE IF NOT EXISTS reminders (
+      id ${id}, reminder_type TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
+      recipient_type TEXT NOT NULL, recipient_id TEXT, channel TEXT NOT NULL,
+      scheduled_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'SCHEDULED',
+      subject TEXT, message TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT, sent_at TEXT, cancelled_at TEXT, idempotency_key TEXT UNIQUE,
+      created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (channel IN ('IN_APP', 'EMAIL', 'SMS', 'WHATSAPP')),
+      CHECK (status IN ('SCHEDULED', 'PROCESSING', 'SENT', 'FAILED', 'CANCELLED'))
     )`,
     `CREATE TABLE IF NOT EXISTS product_commerce (
       product_id INTEGER PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
@@ -695,6 +812,14 @@ function tenantSchema(dialect) {
       id ${id}, user_id TEXT, type TEXT NOT NULL, title TEXT NOT NULL, message TEXT NOT NULL,
       entity_type TEXT, entity_id TEXT, read_at TEXT, created_at TEXT NOT NULL
     )`,
+    `CREATE TABLE IF NOT EXISTS notification_deliveries (
+      id ${id}, reminder_id INTEGER REFERENCES reminders(id) ON DELETE RESTRICT,
+      notification_id INTEGER REFERENCES notifications(id) ON DELETE RESTRICT,
+      channel TEXT NOT NULL, provider TEXT, provider_message_id TEXT,
+      status TEXT NOT NULL, sanitized_payload ${json}, error_message TEXT,
+      attempted_at TEXT NOT NULL, delivered_at TEXT,
+      CHECK (status IN ('PENDING', 'SENT', 'DELIVERED', 'FAILED', 'SKIPPED'))
+    )`,
     `CREATE TABLE IF NOT EXISTS integration_credentials (
       provider TEXT PRIMARY KEY, encrypted_config TEXT NOT NULL,
       status TEXT DEFAULT 'active', updated_by TEXT, updated_at TEXT NOT NULL
@@ -783,6 +908,19 @@ function tenantSchema(dialect) {
       CHECK (CAST(quantity AS REAL) > 0),
       CHECK (rate_minor >= 0 AND gross_minor >= 0 AND discount_minor >= 0),
       CHECK (taxable_minor >= 0 AND line_total_minor >= 0)
+    )`,
+    `CREATE TABLE IF NOT EXISTS payment_links (
+      id ${id}, link_token_hash TEXT NOT NULL UNIQUE,
+      invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
+      customer_id INTEGER REFERENCES customers(id), amount_minor INTEGER NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'INR', provider TEXT NOT NULL DEFAULT 'razorpay',
+      provider_link_id TEXT UNIQUE, status TEXT NOT NULL DEFAULT 'ACTIVE',
+      expires_at TEXT NOT NULL, usage_limit INTEGER NOT NULL DEFAULT 1, usage_count INTEGER NOT NULL DEFAULT 0,
+      metadata ${json}, idempotency_key TEXT UNIQUE, created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (amount_minor > 0),
+      CHECK (status IN ('ACTIVE', 'PAID', 'EXPIRED', 'CANCELLED')),
+      CHECK (usage_limit > 0 AND usage_count >= 0)
     )`,
     `CREATE TABLE IF NOT EXISTS fiscal_adjustments (
       id ${id}, adjustment_number TEXT NOT NULL UNIQUE,
@@ -915,6 +1053,13 @@ function tenantSchema(dialect) {
     `CREATE INDEX IF NOT EXISTS idx_payment_allocations_invoice ON payment_allocations(invoice_id, status)`,
     `CREATE INDEX IF NOT EXISTS idx_payments_customer_date ON payments(customer_id, created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_customer_ledger_customer_date ON customer_ledger_entries(customer_id, occurred_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_journals_date ON journals(journal_date, id)`,
+    `CREATE INDEX IF NOT EXISTS idx_journal_entries_account ON journal_entries(account_id, journal_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_bank_transactions_status_date ON bank_transactions(reconciliation_status, transaction_date)`,
+    `CREATE INDEX IF NOT EXISTS idx_expenses_date_status ON expenses(expense_date, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_payment_links_invoice ON payment_links(invoice_id, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_reminders_schedule ON reminders(status, scheduled_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_project_entries_project ON project_entries(project_id, occurred_at)`,
     `CREATE INDEX IF NOT EXISTS idx_refunds_invoice ON refunds(invoice_id, created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_document_jobs_status ON document_generation_jobs(status, available_at)`,
     `CREATE INDEX IF NOT EXISTS idx_document_links_source ON document_links(source_entity_type, source_entity_id)`,
@@ -1057,6 +1202,9 @@ async function seedSettingsFoundationDefaults(tx) {
     ['navigation_v2', 0],
     ['trade_workspaces', 0],
     ['document_engine_v2', 0],
+    ['finance_v2', 0],
+    ['reminders_v2', 0],
+    ['projects_v2', 0],
     ['notifications_v2', 0]
   ];
   for (const [key, enabled] of defaults) {
@@ -1068,6 +1216,142 @@ async function seedSettingsFoundationDefaults(tx) {
       [key, enabled, JSON.stringify({}), timestamp]
     );
   }
+}
+
+async function seedFinanceOperationsDefaults(tx) {
+  const timestamp = now();
+  for (const key of ['finance_v2', 'reminders_v2', 'projects_v2']) {
+    await tx.run(
+      `INSERT INTO feature_flags (flag_key, enabled, configuration, updated_by, updated_at)
+       VALUES (?, 0, ?, NULL, ?) ON CONFLICT (flag_key) DO NOTHING`,
+      [key, JSON.stringify({}), timestamp]
+    );
+  }
+  const accounts = [
+    ['1000', 'Cash on Hand', 'asset'],
+    ['1100', 'Bank Accounts', 'asset'],
+    ['1200', 'Accounts Receivable', 'asset'],
+    ['2000', 'Accounts Payable', 'liability'],
+    ['2100', 'GST Payable', 'liability'],
+    ['4000', 'Sales Revenue', 'income'],
+    ['5000', 'Cost of Goods Sold', 'expense'],
+    ['6000', 'General Expenses', 'expense'],
+    ['3000', 'Owner Equity', 'equity']
+  ];
+  for (const [code, name, type] of accounts) {
+    await tx.run(
+      `INSERT INTO accounts
+        (code, name, account_type, opening_balance, opening_balance_minor, currency,
+         is_archived, created_at, updated_at)
+       VALUES (?, ?, ?, 0, 0, 'INR', 0, ?, ?)
+       ON CONFLICT (code) DO NOTHING`,
+      [code, name, type, timestamp, timestamp]
+    );
+  }
+  for (const [key, prefix] of [['journal', 'JV'], ['expense', 'EXP'], ['project', 'PRJ']]) {
+    await tx.run(
+      `INSERT INTO number_sequences (sequence_key, prefix, next_value, padding, updated_at)
+       VALUES (?, ?, 1, 6, ?) ON CONFLICT (sequence_key) DO NOTHING`,
+      [key, prefix, timestamp]
+    );
+  }
+  await backfillFinanceJournals(tx);
+}
+
+async function backfillFinanceJournals(tx) {
+  const accountRows = await tx.all(`SELECT id, code FROM accounts WHERE code IN ('1000','1100','1200','2000','2100','4000','5000')`);
+  const accounts = Object.fromEntries(accountRows.map(row => [row.code, row.id]));
+  if (!accounts['1200'] || !accounts['4000']) return;
+  const invoices = await tx.all(`SELECT * FROM invoices WHERE invoice_status = 'ISSUED' ORDER BY id`);
+  for (const invoice of invoices) {
+    const taxMinor = Number(invoice.cgst_total_minor || 0) + Number(invoice.sgst_total_minor || 0)
+      + Number(invoice.igst_total_minor || 0) + Number(invoice.cess_total_minor || 0);
+    await seedFinanceJournal(tx, {
+      journalType: 'INVOICE', sourceType: 'invoice', sourceId: invoice.id,
+      date: String(invoice.issued_at).slice(0, 10), reference: invoice.invoice_number,
+      description: `Migrated invoice ${invoice.invoice_number}.`, actor: 'MIGRATION',
+      entries: [
+        [accounts['1200'], Number(invoice.grand_total_minor), 0, 'customer', invoice.customer_id],
+        [accounts['4000'], 0, Number(invoice.grand_total_minor) - taxMinor, null, null],
+        ...(taxMinor > 0 && accounts['2100'] ? [[accounts['2100'], 0, taxMinor, null, null]] : [])
+      ]
+    });
+  }
+  const allocations = await tx.all(
+    `SELECT pa.*, p.payment_number FROM payment_allocations pa
+      LEFT JOIN payments p ON p.id = pa.payment_id WHERE pa.status = 'SUCCESS' ORDER BY pa.id`
+  );
+  for (const allocation of allocations) {
+    const cashAccount = allocation.method === 'CASH' ? accounts['1000'] : accounts['1100'];
+    if (!cashAccount) continue;
+    await seedFinanceJournal(tx, {
+      journalType: 'RECEIPT', sourceType: 'payment_allocation', sourceId: allocation.id,
+      date: String(allocation.confirmed_at || allocation.created_at).slice(0, 10),
+      reference: allocation.payment_number, description: 'Migrated payment allocation.', actor: 'MIGRATION',
+      entries: [[cashAccount, Number(allocation.amount_minor), 0, null, null], [accounts['1200'], 0, Number(allocation.amount_minor), null, null]]
+    });
+  }
+  const refunds = await tx.all(
+    `SELECT r.*, pa.method FROM refunds r JOIN payment_allocations pa ON pa.id = r.allocation_id
+      WHERE r.status = 'SUCCESS' ORDER BY r.id`
+  );
+  for (const refund of refunds) {
+    const cashAccount = refund.method === 'CASH' ? accounts['1000'] : accounts['1100'];
+    if (!cashAccount) continue;
+    await seedFinanceJournal(tx, {
+      journalType: 'REFUND', sourceType: 'refund', sourceId: refund.id,
+      date: String(refund.created_at).slice(0, 10), reference: refund.refund_number,
+      description: 'Migrated refund.', actor: 'MIGRATION',
+      entries: [[accounts['1200'], Number(refund.amount_minor), 0, null, null], [cashAccount, 0, Number(refund.amount_minor), null, null]]
+    });
+  }
+  const adjustments = await tx.all(`SELECT * FROM fiscal_adjustments WHERE status = 'ISSUED' ORDER BY id`);
+  for (const adjustment of adjustments) {
+    const credit = adjustment.adjustment_type === 'CREDIT_NOTE';
+    const entries = credit
+      ? [
+        [accounts['4000'], Number(adjustment.subtotal_minor), 0, null, null],
+        ...(Number(adjustment.tax_total_minor) > 0 && accounts['2100'] ? [[accounts['2100'], Number(adjustment.tax_total_minor), 0, null, null]] : []),
+        [accounts['1200'], 0, Number(adjustment.grand_total_minor), 'customer', adjustment.party_id]
+      ]
+      : [[accounts['2000'], Number(adjustment.grand_total_minor), 0, 'supplier', adjustment.party_id], [accounts['5000'], 0, Number(adjustment.grand_total_minor), null, null]];
+    await seedFinanceJournal(tx, {
+      journalType: adjustment.adjustment_type, sourceType: 'fiscal_adjustment', sourceId: adjustment.id,
+      date: String(adjustment.issued_at || adjustment.created_at).slice(0, 10),
+      reference: adjustment.adjustment_number, description: adjustment.reason, actor: 'MIGRATION', entries
+    });
+  }
+}
+
+async function seedFinanceJournal(tx, input) {
+  const existing = await tx.one(
+    'SELECT id FROM journals WHERE source_type = ? AND source_id = ? AND journal_type = ?',
+    [input.sourceType, String(input.sourceId), input.journalType]
+  );
+  if (existing) return existing.id;
+  const total = input.entries.reduce((sum, entry) => sum + Number(entry[1] || 0), 0);
+  const credit = input.entries.reduce((sum, entry) => sum + Number(entry[2] || 0), 0);
+  if (total <= 0 || total !== credit || input.entries.some(entry => !entry[0])) return null;
+  const timestamp = now();
+  const journalNo = `MIG-JV-${input.journalType}-${input.sourceId}`;
+  const inserted = await tx.run(
+    `INSERT INTO journals
+      (journal_no, journal_type, journal_date, reference, description, source_type,
+       source_id, status, total_debit_minor, total_credit_minor, created_by, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'POSTED', ?, ?, ?, ?)${tx.dialect === 'postgres' ? ' RETURNING id' : ''}`,
+    [journalNo, input.journalType, input.date, input.reference || null, input.description || null,
+      input.sourceType, String(input.sourceId), total, credit, input.actor, timestamp]
+  );
+  const journalId = inserted.id || inserted.rows?.[0]?.id;
+  for (const [accountId, debitMinor, creditMinor, partyType, partyId] of input.entries) {
+    await tx.run(
+      `INSERT INTO journal_entries
+        (journal_id, account_id, debit_minor, credit_minor, party_type, party_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [journalId, accountId, debitMinor, creditMinor, partyType, partyId || null, timestamp]
+    );
+  }
+  return journalId;
 }
 
 async function seedDocumentEngineDefaults(tx) {

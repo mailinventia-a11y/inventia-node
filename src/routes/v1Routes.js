@@ -128,6 +128,23 @@ import {
   ensureProductBarcodesTx
 } from '../services/barcodeLabelService.js';
 import settingsFoundationRoutes from './v1/settingsRoutes.js';
+import {
+  createBankAccount,
+  createExpense,
+  createFinanceAccount,
+  createJournal,
+  financeReconciliation,
+  financeSummary,
+  getAccountLedger,
+  getJournal,
+  listBankAccounts,
+  listExpenses,
+  listFinanceAccounts,
+  listJournals,
+  paymentTimeline,
+  postBankTransaction,
+  reconcileBankTransaction
+} from '../services/financeOperationsService.js';
 
 const router = express.Router();
 const upload = multer({
@@ -352,6 +369,59 @@ const documentTemplateSchema = z.object({
   configuration: z.record(z.string(), z.unknown()).default({}),
   is_default: z.boolean().default(false),
   status: z.enum(['active', 'inactive']).default('active')
+});
+const financeAccountSchema = z.object({
+  code: z.string().trim().min(1).max(30),
+  name: z.string().trim().min(1).max(200),
+  account_type: z.enum(['asset', 'liability', 'income', 'expense', 'equity']),
+  parent_id: z.coerce.number().int().positive().optional(),
+  opening_balance: z.coerce.number().default(0),
+  currency: z.string().trim().length(3).default('INR')
+});
+const journalSchema = z.object({
+  journal_type: z.string().trim().min(1).max(50).default('GENERAL'),
+  journal_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  reference: z.string().trim().max(200).optional(),
+  description: z.string().trim().max(2000).optional(),
+  entries: z.array(z.object({
+    account_id: z.coerce.number().int().positive(),
+    debit: z.coerce.number().nonnegative().default(0),
+    credit: z.coerce.number().nonnegative().default(0),
+    party_type: z.enum(['customer', 'supplier']).optional(),
+    party_id: z.coerce.number().int().positive().optional(),
+    project_id: z.coerce.number().int().positive().optional(),
+    description: z.string().max(1000).optional()
+  })).min(2).max(200)
+});
+const bankAccountSchema = z.object({
+  account_id: z.coerce.number().int().positive().optional(),
+  code: z.string().trim().max(30).optional(),
+  name: z.string().trim().min(1).max(200),
+  account_number: z.string().trim().min(4).max(100),
+  ifsc: z.string().trim().max(30).optional(),
+  upi_id: z.string().trim().max(200).optional(),
+  opening_balance: z.coerce.number().default(0),
+  currency: z.string().trim().length(3).default('INR')
+});
+const bankTransactionSchema = z.object({
+  direction: z.enum(['IN', 'OUT', 'in', 'out']).transform(value => value.toUpperCase()),
+  amount: z.coerce.number().positive(),
+  offset_account_id: z.coerce.number().int().positive(),
+  method: z.string().trim().max(50).optional(),
+  reference: z.string().trim().max(200).optional(),
+  description: z.string().trim().max(2000).optional(),
+  transaction_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+});
+const expenseSchema = z.object({
+  supplier_id: z.coerce.number().int().positive().optional(),
+  expense_account_id: z.coerce.number().int().positive(),
+  payment_account_id: z.coerce.number().int().positive().optional(),
+  subtotal: z.coerce.number().nonnegative(), tax: z.coerce.number().nonnegative().default(0),
+  expense_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  description: z.string().trim().max(2000).optional(),
+  reference: z.string().trim().max(200).optional(),
+  status: z.enum(['DRAFT', 'POSTED', 'PAID']).default('DRAFT'),
+  project_id: z.coerce.number().int().positive().optional()
 });
 
 router.post('/auth/login', validate(loginSchema), asyncRoute(async (req, res) => {
@@ -1128,6 +1198,52 @@ router.post('/fiscal-adjustments/:adjustmentType/:id/cancel', requirePermission(
 })), mutation(async req => ({
   body: await transitionFiscalAdjustment(req.tenantDb, req.params.id, 'cancel', req.body, req)
 })));
+
+router.get('/finance/accounts', requirePermission('finance.read'), asyncRoute(async (req, res) => {
+  res.json({ accounts: await listFinanceAccounts(req.tenantDb, req.query) });
+}));
+router.post('/finance/accounts', requirePermission('finance.manage'), validate(financeAccountSchema), mutation(async req => ({
+  status: 201, body: await createFinanceAccount(req.tenantDb, req.body, req)
+})));
+router.get('/finance/accounts/:id/ledger', requirePermission('finance.read'), asyncRoute(async (req, res) => {
+  res.json(await getAccountLedger(req.tenantDb, req.params.id, req.query));
+}));
+router.get('/finance/journals', requirePermission('finance.read'), asyncRoute(async (req, res) => {
+  res.json({ journals: await listJournals(req.tenantDb, req.query) });
+}));
+router.post('/finance/journals', requirePermission('finance.manage'), validate(journalSchema), mutation(async req => ({
+  status: 201, body: await createJournal(req.tenantDb, req.body, req)
+})));
+router.get('/finance/journals/:id', requirePermission('finance.read'), asyncRoute(async (req, res) => {
+  res.json(await getJournal(req.tenantDb, req.params.id));
+}));
+router.get('/finance/banks', requirePermission('finance.read'), asyncRoute(async (req, res) => {
+  res.json({ banks: await listBankAccounts(req.tenantDb) });
+}));
+router.post('/finance/banks', requirePermission('finance.manage'), validate(bankAccountSchema), mutation(async req => ({
+  status: 201, body: await createBankAccount(req.tenantDb, req.body, req)
+})));
+router.post('/finance/banks/:id/transactions', requirePermission('finance.manage'), validate(bankTransactionSchema), mutation(async req => ({
+  status: 201, body: await postBankTransaction(req.tenantDb, req.params.id, req.body, req)
+})));
+router.post('/finance/bank-transactions/:id/reconcile', requirePermission('finance.manage'), validate(z.object({})), mutation(async req => ({
+  body: await reconcileBankTransaction(req.tenantDb, req.params.id, req)
+})));
+router.get('/finance/expenses', requirePermission('finance.read'), asyncRoute(async (req, res) => {
+  res.json({ expenses: await listExpenses(req.tenantDb, req.query) });
+}));
+router.post('/finance/expenses', requirePermission('finance.manage'), validate(expenseSchema), mutation(async req => ({
+  status: 201, body: await createExpense(req.tenantDb, req.body, req)
+})));
+router.get('/finance/summary', requirePermission('finance.read'), asyncRoute(async (req, res) => {
+  res.json(await financeSummary(req.tenantDb));
+}));
+router.get('/finance/reconciliation', requirePermission('finance.read'), asyncRoute(async (req, res) => {
+  res.json(await financeReconciliation(req.tenantDb));
+}));
+router.get('/payments/timeline', requirePermission('finance.read'), asyncRoute(async (req, res) => {
+  res.json({ timeline: await paymentTimeline(req.tenantDb, req.query) });
+}));
 
 router.get('/dashboard/summary', requirePermission('dashboard.read'), asyncRoute(async (req, res) => {
   res.json(await dashboardSummary(req.tenantDb, req.user.organization_id, req.query.refresh === 'true'));

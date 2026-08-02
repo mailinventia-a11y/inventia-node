@@ -4,6 +4,7 @@ import { decryptIntegrationConfig } from '../platform/phase5Database.js';
 import { httpError, parseJson, writeTenantAudit } from '../platform/phase5Http.js';
 import { invalidateOrganizationCache, publishOrganizationEvent } from '../platform/phase5Runtime.js';
 import { calculateInvoicePaymentState } from './invoicePaymentService.js';
+import { postRefundAccountingTx } from './financeOperationsService.js';
 import { fromMinor, toMinor } from './moneyService.js';
 
 export async function createRazorpayOrder(db, input, req, sdkFactory = defaultSdkFactory) {
@@ -180,7 +181,7 @@ export async function refundRazorpayPayment(db, input, req, sdkFactory = default
     ]
   );
   const canonicalAttempt = await db.one(
-    `SELECT pa.*, a.id AS allocation_id, a.invoice_id, a.payment_id, a.amount_minor,
+    `SELECT pa.*, a.id AS allocation_id, a.invoice_id, a.payment_id, a.amount_minor, a.method,
             i.customer_id, i.invoice_number
        FROM payment_attempts pa
        LEFT JOIN payment_allocations a ON a.id = pa.allocation_id
@@ -212,6 +213,12 @@ export async function refundRazorpayPayment(db, input, req, sdkFactory = default
         ]
       );
       const refundId = refundInsert.id || refundInsert.rows?.[0]?.id;
+      await postRefundAccountingTx(tx, {
+        refund_id: refundId,
+        refund_number: `RZP-RFN-${refund.id}`,
+        invoice_id: canonicalAttempt.invoice_id,
+        amount_minor: refundMinor
+      }, canonicalAttempt, req.user.tenant_user_id || req.user.id);
       await tx.run(
         `INSERT INTO payment_attempts
           (allocation_id, invoice_id, provider, provider_payment_id, provider_refund_id,

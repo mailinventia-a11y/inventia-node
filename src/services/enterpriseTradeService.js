@@ -10,6 +10,7 @@ import {
   resolveInvoiceSnapshots
 } from './invoicePaymentService.js';
 import { ensureProductBarcodesTx } from './barcodeLabelService.js';
+import { postInvoiceAccountingTx, postPaymentAccountingTx } from './financeOperationsService.js';
 
 const DOCUMENT_TYPES = new Set([
   'quotations', 'sales-orders', 'purchase-orders', 'deliveries',
@@ -1290,7 +1291,16 @@ export async function checkoutPos(db, input, req) {
       grand_total_minor: calculated.grand_total_minor,
       due_date: dueDate
     };
+    await postInvoiceAccountingTx(tx, {
+      invoiceId, invoiceNumber: invoiceNo, customerId: input.customer_id || null,
+      taxableMinor: calculated.grand_total_minor - calculated.cgst_total_minor
+        - calculated.sgst_total_minor - calculated.igst_total_minor - calculated.cess_total_minor,
+      taxMinor: calculated.cgst_total_minor + calculated.sgst_total_minor
+        + calculated.igst_total_minor + calculated.cess_total_minor,
+      grandTotalMinor: calculated.grand_total_minor, issuedAt: timestamp
+    }, actorId);
     const payments = await createCheckoutPaymentsTx(tx, { invoice, input, customer, actorId, req });
+    for (const allocation of payments.allocations) await postPaymentAccountingTx(tx, allocation, actorId);
     await recordInvoiceLedgerTx(tx, invoice, payments, actorId);
     const paymentSummary = await calculateInvoicePaymentState(tx, invoiceId);
     await timeline(tx, 'invoice', documentId, 'pos.completed', actorId, `${invoiceNo} completed through POS.`);
