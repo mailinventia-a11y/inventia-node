@@ -55,6 +55,10 @@ function applyFeatureVisibility(featureFlags) {
   const tradeEnabled = navigationEnabled && Boolean(featureFlags.trade_workspaces?.enabled);
   document.querySelectorAll('[data-module="trade"]').forEach(element => { element.hidden = !tradeEnabled; });
   document.querySelectorAll('[data-tab="milestone1-workspace"]:not([data-module="trade"])').forEach(element => { element.hidden = !navigationEnabled; });
+  document.querySelectorAll('[data-feature]').forEach(element => {
+    const enabled = Boolean(featureFlags[element.dataset.feature]?.enabled);
+    if (!navigationEnabled || !enabled) element.hidden = true;
+  });
   document.querySelectorAll('.nav-dropdown-wrapper').forEach(wrapper => {
     const entries = [...wrapper.querySelectorAll('.nav-dropdown-item')];
     if (entries.length) wrapper.hidden = !entries.some(entry => !entry.hidden);

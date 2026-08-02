@@ -27,7 +27,9 @@ export async function resolveInvoiceSnapshots(tx, input, req, customer) {
   const tenantSettings = Object.fromEntries(
     tenantSettingsRows.map(row => [row.setting_key, parseJson(row.setting_value, row.setting_value)])
   );
-  const settings = { ...controlSettings, ...tenantSettings };
+  const organizationSettings = tenantSettings['settings.organization'] || {};
+  const documentSettings = tenantSettings['settings.documents'] || {};
+  const settings = { ...controlSettings, ...organizationSettings, ...tenantSettings };
   const customerProfile = customer
     ? await tx.one(`SELECT * FROM party_profiles WHERE party_type = 'customer' AND party_id = ?`, [customer.id])
     : null;
@@ -85,7 +87,8 @@ export async function resolveInvoiceSnapshots(tx, input, req, customer) {
       ifsc: settings.bank_ifsc || '',
       upi_id: settings.upi_id || ''
     },
-    terms: String(settings.invoice_terms || settings.terms_conditions || 'Goods once sold are subject to the stated return policy.'),
+    terms: String(documentSettings.terms_by_type?.invoice || documentSettings.default_terms || settings.invoice_terms || settings.terms_conditions || 'Goods once sold are subject to the stated return policy.'),
+    document: documentSettings,
     is_interstate: Boolean(sellerStateCode && customerStateCode && sellerStateCode !== customerStateCode),
     default_credit_days: Number(settings.default_credit_days || 30)
   };
@@ -296,16 +299,26 @@ export async function calculateInvoicePaymentState(db, invoiceId, { persist = tr
        FROM refunds WHERE invoice_id = ? AND status = 'SUCCESS'`,
     [invoiceId]
   );
+  const adjustments = await db.one(
+    `SELECT
+       COALESCE(SUM(CASE WHEN adjustment_type = 'CREDIT_NOTE' THEN grand_total_minor ELSE 0 END), 0) AS credits,
+       COALESCE(SUM(CASE WHEN adjustment_type = 'DEBIT_NOTE' THEN grand_total_minor ELSE 0 END), 0) AS debits
+       FROM fiscal_adjustments WHERE invoice_id = ? AND status = 'ISSUED'`,
+    [invoiceId]
+  );
   const collectedMinor = Number(collected?.amount || 0);
   const refundedMinor = Number(refunded?.amount || 0);
+  const creditAdjustmentsMinor = Number(adjustments?.credits || 0);
+  const debitAdjustmentsMinor = Number(adjustments?.debits || 0);
+  const adjustedTotalMinor = Math.max(Number(invoice.grand_total_minor) - creditAdjustmentsMinor + debitAdjustmentsMinor, 0);
   const netCollectedMinor = collectedMinor - refundedMinor;
-  const outstandingMinor = Math.max(Number(invoice.grand_total_minor) - netCollectedMinor, 0);
+  const outstandingMinor = Math.max(adjustedTotalMinor - netCollectedMinor, 0);
   let status;
   if (invoice.invoice_status === 'VOID') status = 'VOID';
   else if (invoice.invoice_status === 'WRITTEN_OFF') status = 'WRITTEN_OFF';
   else if (refundedMinor > 0 && netCollectedMinor <= 0) status = 'REFUNDED';
   else if (refundedMinor > 0) status = 'PARTIALLY_REFUNDED';
-  else if (netCollectedMinor > Number(invoice.grand_total_minor)) status = 'OVERPAID';
+  else if (netCollectedMinor > adjustedTotalMinor) status = 'OVERPAID';
   else if (outstandingMinor === 0) status = 'PAID';
   else if (netCollectedMinor > 0) status = 'PARTIALLY_PAID';
   else status = 'UNPAID';
@@ -319,11 +332,17 @@ export async function calculateInvoicePaymentState(db, invoiceId, { persist = tr
   return {
     status,
     total_minor: Number(invoice.grand_total_minor),
+    adjusted_total_minor: adjustedTotalMinor,
+    credit_adjustments_minor: creditAdjustmentsMinor,
+    debit_adjustments_minor: debitAdjustmentsMinor,
     collected_minor: collectedMinor,
     refunded_minor: refundedMinor,
     net_collected_minor: netCollectedMinor,
     outstanding_minor: outstandingMinor,
     total: fromMinor(invoice.grand_total_minor),
+    adjusted_total: fromMinor(adjustedTotalMinor),
+    credit_adjustments: fromMinor(creditAdjustmentsMinor),
+    debit_adjustments: fromMinor(debitAdjustmentsMinor),
     collected: fromMinor(collectedMinor),
     refunded: fromMinor(refundedMinor),
     net_collected: fromMinor(netCollectedMinor),
@@ -359,7 +378,9 @@ export async function listInvoices(db, query = {}) {
             i.payment_status, i.grand_total_minor, i.issued_at, i.due_date,
             i.pdf_status, i.latest_pdf_version, c.name AS customer_name,
             COALESCE(SUM(CASE WHEN pa.status = 'SUCCESS' THEN pa.amount_minor ELSE 0 END), 0) AS collected_minor,
-            COALESCE((SELECT SUM(r.amount_minor) FROM refunds r WHERE r.invoice_id = i.id AND r.status = 'SUCCESS'), 0) AS refunded_minor
+            COALESCE((SELECT SUM(r.amount_minor) FROM refunds r WHERE r.invoice_id = i.id AND r.status = 'SUCCESS'), 0) AS refunded_minor,
+            COALESCE((SELECT SUM(fa.grand_total_minor) FROM fiscal_adjustments fa WHERE fa.invoice_id = i.id AND fa.adjustment_type = 'CREDIT_NOTE' AND fa.status = 'ISSUED'), 0) AS credit_adjustments_minor,
+            COALESCE((SELECT SUM(fa.grand_total_minor) FROM fiscal_adjustments fa WHERE fa.invoice_id = i.id AND fa.adjustment_type = 'DEBIT_NOTE' AND fa.status = 'ISSUED'), 0) AS debit_adjustments_minor
        FROM invoices i
        LEFT JOIN customers c ON c.id = i.customer_id
        LEFT JOIN payment_allocations pa ON pa.invoice_id = i.id
@@ -370,13 +391,17 @@ export async function listInvoices(db, query = {}) {
       ORDER BY i.issued_at DESC, i.id DESC LIMIT 500`,
     params
   );
-  return rows.map(row => ({
-    ...row,
-    grand_total: fromMinor(row.grand_total_minor),
-    collected: fromMinor(Number(row.collected_minor || 0) - Number(row.refunded_minor || 0)),
-    outstanding: fromMinor(Math.max(Number(row.grand_total_minor) - Number(row.collected_minor || 0) + Number(row.refunded_minor || 0), 0)),
-    pdf: invoicePdfState(row)
-  }));
+  return rows.map(row => {
+    const adjustedTotalMinor = Math.max(Number(row.grand_total_minor) - Number(row.credit_adjustments_minor || 0) + Number(row.debit_adjustments_minor || 0), 0);
+    return {
+      ...row,
+      grand_total: fromMinor(row.grand_total_minor),
+      adjusted_total: fromMinor(adjustedTotalMinor),
+      collected: fromMinor(Number(row.collected_minor || 0) - Number(row.refunded_minor || 0)),
+      outstanding: fromMinor(Math.max(adjustedTotalMinor - Number(row.collected_minor || 0) + Number(row.refunded_minor || 0), 0)),
+      pdf: invoicePdfState(row)
+    };
+  });
 }
 
 export async function getInvoice(db, invoiceId) {
@@ -404,6 +429,7 @@ export async function getInvoice(db, invoiceId) {
     customer_snapshot: parseJson(invoice.customer_snapshot, {}),
     delivery_snapshot: parseJson(invoice.delivery_snapshot, {}),
     bank_snapshot: parseJson(invoice.bank_snapshot, {}),
+    document_settings_snapshot: parseJson(invoice.document_settings_snapshot, {}),
     items: items.map(item => ({ ...item, metadata: parseJson(item.metadata, {}) })),
     allocations: allocations.map(item => ({ ...item, metadata: parseJson(item.metadata, {}) })),
     refunds,
@@ -770,6 +796,7 @@ async function renderInvoiceHtml(invoice) {
   const delivery = invoice.delivery_snapshot;
   const bank = invoice.bank_snapshot;
   const payment = invoice.payment_summary;
+  const documentSettings = invoice.document_settings_snapshot || {};
   const upiUrl = bank.upi_id
     ? `upi://pay?pa=${encodeURIComponent(bank.upi_id)}&pn=${encodeURIComponent(seller.name)}&am=${minorToFixed(payment.outstanding_minor || invoice.grand_total_minor)}&cu=INR&tn=${encodeURIComponent(invoice.invoice_number)}`
     : null;
@@ -799,6 +826,7 @@ async function renderInvoiceHtml(invoice) {
     </tr>`).join('') || '<tr><td colspan="4">No collection recorded.</td></tr>';
   const replacements = {
     CSS_CONTENT: css,
+    WATERMARK_HTML: documentSettings.watermark ? `<div class="invoice-watermark">${escapeHtml(documentSettings.watermark)}</div>` : '',
     LOGO_HTML: seller.logo ? `<img class="company-logo" src="${escapeAttribute(seller.logo)}" alt="">` : '',
     companyName: seller.name,
     companyAddress: seller.address,
@@ -839,7 +867,9 @@ async function renderInvoiceHtml(invoice) {
     grandTotal: formatMoney(invoice.grand_total_minor),
     PAYMENT_ROWS: paymentRows,
     receivedAmount: formatMoney(payment.net_collected_minor),
-    outstandingAmount: formatMoney(payment.outstanding_minor)
+    outstandingAmount: formatMoney(payment.outstanding_minor),
+    authorizedSignatory: documentSettings.signature_name || 'Authorized Signatory',
+    printFooter: documentSettings.footer_text || `Computer-generated GST invoice · ${invoice.invoice_number}`
   };
   return Object.entries(replacements).reduce(
     (compiled, [key, value]) => compiled.replaceAll(`{{${key}}}`, String(value ?? '')),

@@ -130,6 +130,21 @@ export async function migrateTenantDatabase(database) {
         ['phase6-settings-foundation-001', now()]
       );
     }
+    const documentEngineApplied = await tx.one(
+      'SELECT version FROM migration_versions WHERE version = ?',
+      ['phase6-document-engine-002']
+    );
+    if (!documentEngineApplied) {
+      const invoiceColumns = await tableColumns(tx, 'invoices');
+      if (!invoiceColumns.includes('document_settings_snapshot')) {
+        await tx.run(`ALTER TABLE invoices ADD COLUMN document_settings_snapshot ${database.dialect === 'postgres' ? 'JSONB' : 'TEXT'}`);
+      }
+      await seedDocumentEngineDefaults(tx);
+      await tx.run(
+        'INSERT INTO migration_versions (version, applied_at) VALUES (?, ?)',
+        ['phase6-document-engine-002', now()]
+      );
+    }
   });
 }
 
@@ -623,6 +638,22 @@ function tenantSchema(dialect) {
       unit_price REAL NOT NULL, discount REAL DEFAULT 0, tax_rate REAL DEFAULT 0,
       tax_amount REAL DEFAULT 0, line_total REAL NOT NULL, metadata ${json}
     )`,
+    `CREATE TABLE IF NOT EXISTS document_links (
+      id ${id}, source_entity_type TEXT NOT NULL, source_entity_id INTEGER NOT NULL,
+      target_entity_type TEXT NOT NULL, target_entity_id INTEGER NOT NULL,
+      relationship_type TEXT NOT NULL, metadata ${json}, created_by TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE (source_entity_type, source_entity_id, target_entity_type, target_entity_id, relationship_type)
+    )`,
+    `CREATE TABLE IF NOT EXISTS document_templates (
+      id ${id}, name TEXT NOT NULL, document_type TEXT NOT NULL,
+      format TEXT NOT NULL DEFAULT 'A4', configuration ${json} NOT NULL,
+      is_default INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active',
+      created_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (format IN ('A4', 'THERMAL')),
+      CHECK (is_default IN (0, 1)),
+      CHECK (status IN ('active', 'inactive'))
+    )`,
     `CREATE TABLE IF NOT EXISTS goods_receipts (
       id ${id}, receipt_no TEXT UNIQUE NOT NULL, purchase_order_id INTEGER NOT NULL,
       warehouse_id INTEGER NOT NULL, supplier_id INTEGER, status TEXT DEFAULT 'completed',
@@ -729,7 +760,7 @@ function tenantSchema(dialect) {
       issued_at TEXT NOT NULL, due_date TEXT,
       seller_snapshot ${json} NOT NULL, customer_snapshot ${json} NOT NULL,
       delivery_snapshot ${json} NOT NULL, bank_snapshot ${json} NOT NULL,
-      terms_snapshot TEXT, pdf_status TEXT NOT NULL DEFAULT 'PENDING',
+      terms_snapshot TEXT, document_settings_snapshot ${json}, pdf_status TEXT NOT NULL DEFAULT 'PENDING',
       pdf_error TEXT, latest_pdf_version INTEGER NOT NULL DEFAULT 0,
       latest_pdf_key TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
       CHECK (invoice_status IN ('ISSUED', 'VOID', 'WRITTEN_OFF')),
@@ -752,6 +783,46 @@ function tenantSchema(dialect) {
       CHECK (CAST(quantity AS REAL) > 0),
       CHECK (rate_minor >= 0 AND gross_minor >= 0 AND discount_minor >= 0),
       CHECK (taxable_minor >= 0 AND line_total_minor >= 0)
+    )`,
+    `CREATE TABLE IF NOT EXISTS fiscal_adjustments (
+      id ${id}, adjustment_number TEXT NOT NULL UNIQUE,
+      adjustment_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'DRAFT',
+      invoice_id INTEGER REFERENCES invoices(id) ON DELETE RESTRICT,
+      trade_document_id INTEGER REFERENCES trade_documents(id) ON DELETE RESTRICT,
+      party_type TEXT NOT NULL, party_id INTEGER NOT NULL,
+      warehouse_id INTEGER, currency TEXT NOT NULL DEFAULT 'INR', reason TEXT NOT NULL,
+      subtotal_minor INTEGER NOT NULL DEFAULT 0, tax_total_minor INTEGER NOT NULL DEFAULT 0,
+      grand_total_minor INTEGER NOT NULL, affects_stock INTEGER NOT NULL DEFAULT 0,
+      party_snapshot ${json} NOT NULL, document_snapshot ${json} NOT NULL,
+      created_by TEXT NOT NULL, issued_by TEXT, issued_at TEXT,
+      cancelled_by TEXT, cancelled_at TEXT, cancellation_reason TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (adjustment_type IN ('CREDIT_NOTE', 'DEBIT_NOTE')),
+      CHECK (status IN ('DRAFT', 'ISSUED', 'CANCELLED')),
+      CHECK (party_type IN ('customer', 'supplier')),
+      CHECK (affects_stock IN (0, 1)),
+      CHECK (subtotal_minor >= 0 AND tax_total_minor >= 0 AND grand_total_minor > 0)
+    )`,
+    `CREATE TABLE IF NOT EXISTS fiscal_adjustment_lines (
+      id ${id}, adjustment_id INTEGER NOT NULL REFERENCES fiscal_adjustments(id) ON DELETE RESTRICT,
+      product_id INTEGER, variant_id INTEGER, description TEXT NOT NULL,
+      quantity TEXT NOT NULL, unit TEXT NOT NULL, rate_minor INTEGER NOT NULL,
+      discount_minor INTEGER NOT NULL DEFAULT 0, taxable_minor INTEGER NOT NULL,
+      tax_rate TEXT NOT NULL, tax_minor INTEGER NOT NULL DEFAULT 0,
+      line_total_minor INTEGER NOT NULL, metadata ${json},
+      CHECK (CAST(quantity AS REAL) > 0),
+      CHECK (rate_minor >= 0 AND discount_minor >= 0 AND taxable_minor >= 0 AND tax_minor >= 0 AND line_total_minor > 0)
+    )`,
+    `CREATE TABLE IF NOT EXISTS party_ledger_entries (
+      id ${id}, party_type TEXT NOT NULL, party_id INTEGER NOT NULL,
+      fiscal_adjustment_id INTEGER NOT NULL REFERENCES fiscal_adjustments(id) ON DELETE RESTRICT,
+      direction TEXT NOT NULL, amount_minor INTEGER NOT NULL,
+      reference_number TEXT NOT NULL, description TEXT, created_by TEXT NOT NULL,
+      occurred_at TEXT NOT NULL, created_at TEXT NOT NULL,
+      UNIQUE (fiscal_adjustment_id),
+      CHECK (party_type IN ('customer', 'supplier')),
+      CHECK (direction IN ('DEBIT', 'CREDIT')),
+      CHECK (amount_minor > 0)
     )`,
     `CREATE TABLE IF NOT EXISTS payments (
       id ${id}, payment_number TEXT NOT NULL UNIQUE,
@@ -846,6 +917,10 @@ function tenantSchema(dialect) {
     `CREATE INDEX IF NOT EXISTS idx_customer_ledger_customer_date ON customer_ledger_entries(customer_id, occurred_at)`,
     `CREATE INDEX IF NOT EXISTS idx_refunds_invoice ON refunds(invoice_id, created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_document_jobs_status ON document_generation_jobs(status, available_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_document_links_source ON document_links(source_entity_type, source_entity_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_document_links_target ON document_links(target_entity_type, target_entity_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_fiscal_adjustments_party_date ON fiscal_adjustments(party_type, party_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_fiscal_adjustments_invoice ON fiscal_adjustments(invoice_id, status)`,
     `CREATE TABLE IF NOT EXISTS ai_conversations (
       id ${id}, user_id TEXT NOT NULL, title TEXT NOT NULL, status TEXT DEFAULT 'active',
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL
@@ -981,6 +1056,7 @@ async function seedSettingsFoundationDefaults(tx) {
     ['settings_namespaces', 1],
     ['navigation_v2', 0],
     ['trade_workspaces', 0],
+    ['document_engine_v2', 0],
     ['notifications_v2', 0]
   ];
   for (const [key, enabled] of defaults) {
@@ -990,6 +1066,32 @@ async function seedSettingsFoundationDefaults(tx) {
        VALUES (?, ?, ?, NULL, ?)
        ON CONFLICT (flag_key) DO NOTHING`,
       [key, enabled, JSON.stringify({}), timestamp]
+    );
+  }
+}
+
+async function seedDocumentEngineDefaults(tx) {
+  const timestamp = now();
+  await tx.run(
+    `INSERT INTO feature_flags (flag_key, enabled, configuration, updated_by, updated_at)
+     VALUES ('document_engine_v2', 0, ?, NULL, ?)
+     ON CONFLICT (flag_key) DO NOTHING`,
+    [JSON.stringify({}), timestamp]
+  );
+  for (const [key, prefix] of [['pro_forma_invoice', 'PI'], ['credit_note', 'CN'], ['debit_note', 'DN']]) {
+    await tx.run(
+      `INSERT INTO number_sequences (sequence_key, prefix, next_value, padding, updated_at)
+       VALUES (?, ?, 1, 6, ?) ON CONFLICT (sequence_key) DO NOTHING`,
+      [key, prefix, timestamp]
+    );
+  }
+  const existing = await tx.one(`SELECT id FROM document_templates WHERE document_type = 'invoice' AND is_default = 1`);
+  if (!existing) {
+    await tx.run(
+      `INSERT INTO document_templates
+        (name, document_type, format, configuration, is_default, status, created_by, created_at, updated_at)
+       VALUES ('GST Invoice A4', 'invoice', 'A4', ?, 1, 'active', NULL, ?, ?)`,
+      [JSON.stringify({ use_semantic_html: true, repeat_table_header: true, print_background: true }), timestamp, timestamp]
     );
   }
 }

@@ -13,7 +13,7 @@ import { ensureProductBarcodesTx } from './barcodeLabelService.js';
 
 const DOCUMENT_TYPES = new Set([
   'quotations', 'sales-orders', 'purchase-orders', 'deliveries',
-  'packing-lists', 'invoices', 'sales-returns', 'purchase-returns'
+  'packing-lists', 'pro-forma-invoices', 'invoices', 'sales-returns', 'purchase-returns'
 ]);
 const DOCUMENT_TYPE_MAP = {
   quotations: 'quotation',
@@ -21,6 +21,7 @@ const DOCUMENT_TYPE_MAP = {
   'purchase-orders': 'purchase_order',
   deliveries: 'delivery_challan',
   'packing-lists': 'packing_list',
+  'pro-forma-invoices': 'pro_forma_invoice',
   invoices: 'invoice',
   'sales-returns': 'sales_return',
   'purchase-returns': 'purchase_return'
@@ -290,7 +291,7 @@ export async function postStockMovement(db, input, req) {
   return movement;
 }
 
-async function postStockMovementTx(tx, input, actorUserId) {
+export async function postStockMovementTx(tx, input, actorUserId) {
   const product = await tx.one(
     `SELECT p.id, p.cost_price, COALESCE(pc.valuation_method, 'weighted_average') AS valuation_method
        FROM products p LEFT JOIN product_commerce pc ON pc.product_id = p.id WHERE p.id = ?`,
@@ -701,6 +702,19 @@ export async function completeCycleCount(db, id, input, req) {
 export async function createTradeDocument(db, routeType, input, req) {
   const documentType = mapDocumentType(routeType);
   const result = await db.transaction(async tx => {
+    let sourceDocument = null;
+    if (input.source_document_id) {
+      sourceDocument = await tx.one('SELECT * FROM trade_documents WHERE id = ?', [input.source_document_id]);
+      if (!sourceDocument) throw httpError(404, 'source_document_not_found', 'The source document was not found.');
+      assertConversionAllowed(sourceDocument, documentType);
+      const existing = await tx.one(
+        `SELECT * FROM document_links
+          WHERE source_entity_type = 'trade_document' AND source_entity_id = ?
+            AND relationship_type = ?`,
+        [sourceDocument.id, `converted_to:${documentType}`]
+      );
+      if (existing) throw httpError(409, 'document_already_converted', 'This conversion has already been completed.');
+    }
     await validateTradeParty(tx, documentType, input);
     const calculated = await calculateLines(tx, input.lines, documentType);
     await enforceCreditLimit(tx, documentType, input.party_id, calculated.grand_total);
@@ -736,6 +750,17 @@ export async function createTradeDocument(db, routeType, input, req) {
       );
     }
     await timeline(tx, documentType, documentId, 'created', req.user.id, `${documentNo} was created.`);
+    if (sourceDocument) {
+      await tx.run(
+        `INSERT INTO document_links
+          (source_entity_type, source_entity_id, target_entity_type, target_entity_id,
+           relationship_type, metadata, created_by, created_at)
+         VALUES ('trade_document', ?, 'trade_document', ?, ?, ?, ?, ?)`,
+        [sourceDocument.id, documentId, `converted_to:${documentType}`,
+          JSON.stringify({ source_document_no: sourceDocument.document_no, target_document_no: documentNo }), req.user.id, timestamp]
+      );
+      await timeline(tx, sourceDocument.document_type, sourceDocument.id, `converted.${documentType}`, req.user.id, `${sourceDocument.document_no} converted to ${documentNo}.`);
+    }
     return documentId;
   });
   const document = await getTradeDocument(db, result);
@@ -765,18 +790,26 @@ export async function listTradeDocuments(db, routeType, query = {}) {
 export async function getTradeDocument(db, id) {
   const document = await db.one('SELECT * FROM trade_documents WHERE id = ?', [id]);
   if (!document) throw httpError(404, 'trade_document_not_found', 'Trade document was not found.');
-  const [lines, approvals, timelineRows, attachments] = await Promise.all([
+  const [lines, approvals, timelineRows, attachments, links] = await Promise.all([
     db.all('SELECT * FROM trade_document_lines WHERE document_id = ? ORDER BY id', [id]),
     db.all('SELECT * FROM approval_requests WHERE entity_type = ? AND entity_id = ? ORDER BY created_at DESC', [document.document_type, String(id)]),
     db.all('SELECT * FROM entity_timeline WHERE entity_type = ? AND entity_id = ? ORDER BY created_at DESC', [document.document_type, String(id)]),
-    db.all('SELECT * FROM attachments WHERE entity_type = ? AND entity_id = ? ORDER BY created_at DESC', [document.document_type, String(id)])
+    db.all('SELECT * FROM attachments WHERE entity_type = ? AND entity_id = ? ORDER BY created_at DESC', [document.document_type, String(id)]),
+    db.all(
+      `SELECT * FROM document_links
+        WHERE (source_entity_type = 'trade_document' AND source_entity_id = ?)
+           OR (target_entity_type = 'trade_document' AND target_entity_id = ?)
+        ORDER BY created_at DESC`,
+      [id, id]
+    )
   ]);
   return {
     ...normalizeJsonFields(document),
     lines: lines.map(normalizeJsonFields),
     approvals,
     timeline: timelineRows.map(normalizeJsonFields),
-    attachments
+    attachments,
+    links: links.map(normalizeJsonFields)
   };
 }
 
@@ -910,6 +943,13 @@ export async function receivePurchaseOrder(db, id, input, req) {
       progress, progress === 'fulfilled' ? now() : null, now(), id
     ]);
     await timeline(tx, 'purchase_order', id, 'goods_received', req.user.id, `${receiptNo} was received.`);
+    await tx.run(
+      `INSERT INTO document_links
+        (source_entity_type, source_entity_id, target_entity_type, target_entity_id,
+         relationship_type, metadata, created_by, created_at)
+       VALUES ('purchase_order', ?, 'goods_receipt', ?, ?, ?, ?, ?)`,
+      [id, grnId, `receipt:${grnId}`, JSON.stringify({ receipt_no: receiptNo }), req.user.id, now()]
+    );
     return grnId;
   });
   const receipt = await db.one('SELECT * FROM goods_receipts WHERE id = ?', [receiptId]);
@@ -1052,6 +1092,38 @@ export async function checkoutPos(db, input, req) {
       ? await tx.one('SELECT * FROM customers WHERE id = ?', [input.customer_id])
       : null;
     if (input.customer_id && !customer) throw httpError(404, 'customer_not_found', 'Customer was not found.');
+    let sourceSalesOrder = null;
+    if (input.source_trade_document_id) {
+      const lock = tx.dialect === 'postgres' ? ' FOR UPDATE' : '';
+      sourceSalesOrder = await tx.one(
+        `SELECT * FROM trade_documents WHERE id = ? AND document_type = 'sales_order'${lock}`,
+        [input.source_trade_document_id]
+      );
+      if (!sourceSalesOrder) throw httpError(404, 'sales_order_not_found', 'The source sales order was not found.');
+      if (sourceSalesOrder.status !== 'approved') {
+        throw httpError(409, 'sales_order_not_invoiceable', 'The sales order must be approved and unfulfilled before invoicing.');
+      }
+      const existingLink = await tx.one(
+        `SELECT id FROM document_links
+          WHERE source_entity_type = 'sales_order' AND source_entity_id = ?
+            AND target_entity_type = 'invoice' AND relationship_type = 'converted_to:invoice'`,
+        [sourceSalesOrder.id]
+      );
+      if (existingLink) throw httpError(409, 'document_already_converted', 'This sales order already has an invoice.');
+      if (Number(sourceSalesOrder.party_id) !== Number(input.customer_id)
+          || Number(sourceSalesOrder.warehouse_id) !== Number(input.warehouse_id)) {
+        throw httpError(409, 'conversion_context_changed', 'The sales order customer or warehouse no longer matches checkout.');
+      }
+      sourceSalesOrder.lines = await tx.all(
+        'SELECT * FROM trade_document_lines WHERE document_id = ? ORDER BY id',
+        [sourceSalesOrder.id]
+      );
+      const submitted = input.items.map(item => `${item.product_id}:${item.variant_id || ''}:${Number(item.quantity)}`).sort();
+      const expected = sourceSalesOrder.lines.map(line => `${line.product_id}:${line.variant_id || ''}:${Number(line.quantity)}`).sort();
+      if (JSON.stringify(submitted) !== JSON.stringify(expected)) {
+        throw httpError(409, 'conversion_lines_changed', 'The invoice items must match the approved sales order.');
+      }
+    }
     const snapshots = await resolveInvoiceSnapshots(tx, input, req, customer);
     const lines = [];
     for (const item of input.items) {
@@ -1111,12 +1183,12 @@ export async function checkoutPos(db, input, req) {
     const saleId = saleInsert.id || saleInsert.rows?.[0]?.id;
     const documentInsert = await insertWithId(tx,
       `INSERT INTO trade_documents
-        (document_no, document_type, status, party_type, party_id, warehouse_id, currency,
+        (document_no, document_type, status, party_type, party_id, warehouse_id, source_document_id, currency,
          subtotal, discount, tax_total, grand_total, notes, metadata, created_by,
          approved_by, approved_at, fulfilled_at, created_at, updated_at)
-       VALUES (?, 'invoice', 'completed', 'customer', ?, ?, 'INR', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, 'invoice', 'completed', 'customer', ?, ?, ?, 'INR', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        invoiceNo, input.customer_id || null, input.warehouse_id,
+        invoiceNo, input.customer_id || null, input.warehouse_id, sourceSalesOrder?.id || null,
         fromMinor(calculated.subtotal_minor), fromMinor(calculated.discount_total_minor),
         fromMinor(calculated.cgst_total_minor + calculated.sgst_total_minor + calculated.igst_total_minor),
         fromMinor(calculated.grand_total_minor), input.notes || null,
@@ -1132,8 +1204,8 @@ export async function checkoutPos(db, input, req) {
          cgst_total_minor, sgst_total_minor, igst_total_minor, cess_total_minor,
          round_off_minor, grand_total_minor, issued_at, due_date, seller_snapshot,
          customer_snapshot, delivery_snapshot, bank_snapshot, terms_snapshot,
-         pdf_status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'ISSUED', 'UNPAID', 'INR', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)`,
+         document_settings_snapshot, pdf_status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'ISSUED', 'UNPAID', 'INR', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)`,
       [
         saleId, documentId, input.customer_id || null, invoiceNo,
         calculated.subtotal_minor, calculated.discount_total_minor, calculated.taxable_total_minor,
@@ -1141,6 +1213,7 @@ export async function checkoutPos(db, input, req) {
         calculated.cess_total_minor, calculated.round_off_minor, calculated.grand_total_minor,
         timestamp, dueDate, JSON.stringify(snapshots.seller), JSON.stringify(snapshots.customer),
         JSON.stringify(snapshots.delivery), JSON.stringify(snapshots.bank), snapshots.terms,
+        JSON.stringify(snapshots.document || {}),
         timestamp, timestamp
       ]
     );
@@ -1184,6 +1257,29 @@ export async function checkoutPos(db, input, req) {
         reference_type: 'sale',
         reference_id: saleId
       }, actorId);
+    }
+    if (sourceSalesOrder) {
+      await tx.run(
+        'UPDATE trade_document_lines SET fulfilled_quantity = quantity WHERE document_id = ?',
+        [sourceSalesOrder.id]
+      );
+      await tx.run(
+        `UPDATE stock_reservations SET fulfilled_quantity = quantity, status = 'fulfilled', updated_at = ?
+          WHERE reference_type = 'sales_order' AND reference_id = ? AND status = 'active'`,
+        [timestamp, String(sourceSalesOrder.id)]
+      );
+      await tx.run(
+        `UPDATE trade_documents SET status = 'completed', fulfilled_at = ?, updated_at = ? WHERE id = ?`,
+        [timestamp, timestamp, sourceSalesOrder.id]
+      );
+      await tx.run(
+        `INSERT INTO document_links
+          (source_entity_type, source_entity_id, target_entity_type, target_entity_id,
+           relationship_type, metadata, created_by, created_at)
+         VALUES ('sales_order', ?, 'invoice', ?, 'converted_to:invoice', ?, ?, ?)`,
+        [sourceSalesOrder.id, invoiceId, JSON.stringify({ invoice_number: invoiceNo, trade_document_id: documentId }), actorId, timestamp]
+      );
+      await timeline(tx, 'sales_order', sourceSalesOrder.id, 'converted.invoice', actorId, `${invoiceNo} was created.`);
     }
     const invoice = {
       id: invoiceId,
@@ -1259,7 +1355,7 @@ async function calculateLines(tx, lines, documentType) {
     const unitPrice = Number(input.unit_price);
     const discount = Number(input.discount || 0);
     const taxRate = Number(input.tax_rate ?? product.gst_rate ?? 0);
-    if (['quotation', 'sales_order', 'invoice', 'sales_return'].includes(documentType)) {
+    if (['quotation', 'sales_order', 'pro_forma_invoice', 'invoice', 'sales_return'].includes(documentType)) {
       if (unitPrice < Number(product.minimum_price || 0)) throw httpError(409, 'minimum_price_violation', `${product.name} cannot be sold below its minimum price.`);
       if (product.maximum_price != null && unitPrice > Number(product.maximum_price)) throw httpError(409, 'maximum_price_violation', `${product.name} exceeds its maximum price.`);
     }
@@ -1410,12 +1506,23 @@ async function fulfillmentStatus(tx, documentId) {
 async function nextNumber(tx, type) {
   const prefixes = {
     quotation: 'QT', sales_order: 'SO', purchase_order: 'PO', goods_receipt: 'GRN',
-    delivery_challan: 'DC', packing_list: 'PL', invoice: 'INV',
+    delivery_challan: 'DC', packing_list: 'PL', pro_forma_invoice: 'PI', invoice: 'INV',
     sales_return: 'SR', purchase_return: 'PR'
   };
   const year = new Date().getFullYear();
-  const sequenceKey = type === 'invoice' ? `invoice:${year}` : type;
-  const prefix = type === 'invoice' ? `INV-${year}` : (prefixes[type] || 'DOC');
+  const settingsRow = await tx.one(`SELECT setting_value FROM organization_settings WHERE setting_key = 'settings.documents'`);
+  const documentSettings = parseJson(settingsRow?.setting_value, {});
+  const numbering = documentSettings.numbering || {};
+  const prefixKeys = {
+    quotation: 'quotation_prefix', sales_order: 'sales_order_prefix', purchase_order: 'purchase_order_prefix',
+    delivery_challan: 'delivery_prefix', packing_list: 'packing_list_prefix', pro_forma_invoice: 'pro_forma_prefix',
+    credit_note: 'credit_note_prefix', debit_note: 'debit_note_prefix'
+  };
+  const basePrefix = String(numbering[prefixKeys[type]] || prefixes[type] || 'DOC').trim().toUpperCase();
+  const yearlyReset = type === 'invoice' || numbering.yearly_reset === true;
+  const sequenceKey = yearlyReset ? `${type}:${year}` : type;
+  const prefix = yearlyReset ? `${basePrefix}-${year}` : basePrefix;
+  const padding = Number(numbering.padding || 6);
   const lock = tx.dialect === 'postgres' ? ' FOR UPDATE' : '';
   let sequence = await tx.one(`SELECT * FROM number_sequences WHERE sequence_key = ?${lock}`, [sequenceKey]);
   if (!sequence) {
@@ -1423,9 +1530,10 @@ async function nextNumber(tx, type) {
       'INSERT INTO number_sequences (sequence_key, prefix, next_value, padding, updated_at) VALUES (?, ?, 2, 6, ?)',
       [sequenceKey, prefix, now()]
     );
-    sequence = { prefix, next_value: 1, padding: 6 };
+    sequence = { prefix, next_value: 1, padding };
   } else {
-    await tx.run('UPDATE number_sequences SET next_value = next_value + 1, updated_at = ? WHERE sequence_key = ?', [now(), sequenceKey]);
+    await tx.run('UPDATE number_sequences SET prefix = ?, padding = ?, next_value = next_value + 1, updated_at = ? WHERE sequence_key = ?', [prefix, padding, now(), sequenceKey]);
+    sequence = { ...sequence, prefix, padding };
   }
   let value = Number(sequence.next_value);
   let candidate = `${sequence.prefix}-${String(value).padStart(Number(sequence.padding), '0')}`;
@@ -1459,8 +1567,24 @@ function mapDocumentType(routeType) {
   return DOCUMENT_TYPE_MAP[routeType];
 }
 
+function assertConversionAllowed(source, targetType) {
+  const targets = {
+    quotation: new Set(['sales_order', 'pro_forma_invoice']),
+    sales_order: new Set(['delivery_challan', 'packing_list'])
+  };
+  if (!targets[source.document_type]?.has(targetType)) {
+    throw httpError(409, 'document_conversion_not_allowed', `${source.document_type} cannot be converted to ${targetType}.`);
+  }
+  const allowedStatuses = source.document_type === 'quotation'
+    ? new Set(['approved', 'completed'])
+    : new Set(['approved', 'partially_fulfilled', 'fulfilled']);
+  if (!allowedStatuses.has(source.status)) {
+    throw httpError(409, 'source_document_not_convertible', 'Approve the source document before converting it.');
+  }
+}
+
 function partyTypeForDocument(documentType) {
-  if (['quotation', 'sales_order', 'delivery_challan', 'packing_list', 'invoice', 'sales_return'].includes(documentType)) return 'customer';
+  if (['quotation', 'sales_order', 'delivery_challan', 'packing_list', 'pro_forma_invoice', 'invoice', 'sales_return'].includes(documentType)) return 'customer';
   if (['purchase_order', 'purchase_return'].includes(documentType)) return 'supplier';
   return null;
 }

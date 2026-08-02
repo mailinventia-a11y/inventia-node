@@ -56,8 +56,35 @@ const settingSchemas = {
       bottom: z.coerce.number().min(0).max(250).optional(),
       left: z.coerce.number().min(0).max(250).optional()
     }).optional(),
+    numbering: z.strictObject({
+      quotation_prefix: z.string().trim().min(1).max(20).optional(),
+      sales_order_prefix: z.string().trim().min(1).max(20).optional(),
+      purchase_order_prefix: z.string().trim().min(1).max(20).optional(),
+      pro_forma_prefix: z.string().trim().min(1).max(20).optional(),
+      delivery_prefix: z.string().trim().min(1).max(20).optional(),
+      packing_list_prefix: z.string().trim().min(1).max(20).optional(),
+      credit_note_prefix: z.string().trim().min(1).max(20).optional(),
+      debit_note_prefix: z.string().trim().min(1).max(20).optional(),
+      padding: z.coerce.number().int().min(3).max(12).optional(),
+      yearly_reset: z.boolean().optional()
+    }).optional(),
+    template: z.string().trim().min(1).max(200).optional(),
+    language: z.string().trim().min(2).max(20).optional(),
+    font_family: z.string().trim().min(1).max(100).optional(),
+    striped_rows: z.boolean().optional(),
+    show_company_logo: z.boolean().optional(),
+    show_signature: z.boolean().optional(),
+    watermark: z.string().max(200).optional(),
+    header_text: z.string().max(1000).optional(),
+    footer_text: z.string().max(1000).optional(),
+    signature_name: z.string().max(200).optional(),
+    thermal_receipt_footer: z.string().max(1000).optional(),
     default_notes: z.string().max(10000).optional(),
-    default_terms: z.string().max(10000).optional()
+    default_terms: z.string().max(10000).optional(),
+    notes_by_type: z.record(z.string(), z.string().max(10000)).optional(),
+    terms_by_type: z.record(z.string(), z.string().max(10000)).optional(),
+    email_template: z.string().max(5000).optional(),
+    whatsapp_template: z.string().max(5000).optional()
   }),
   pos: z.strictObject({
     active: z.boolean().optional(),

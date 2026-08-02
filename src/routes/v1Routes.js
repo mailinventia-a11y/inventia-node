@@ -79,6 +79,16 @@ import {
   updatePaymentMethods
 } from '../services/invoicePaymentService.js';
 import {
+  convertDocument,
+  createFiscalAdjustment,
+  getFiscalAdjustment,
+  listDocumentLinks,
+  listDocumentTemplates,
+  listFiscalAdjustments,
+  saveDocumentTemplate,
+  transitionFiscalAdjustment
+} from '../services/documentEngineService.js';
+import {
   approveTenantAiAction,
   createKnowledge,
   deleteKnowledge,
@@ -304,6 +314,44 @@ const tradeSchema = z.object({
   notes: z.string().max(10000).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   lines: z.array(tradeLineSchema).min(1).max(500)
+});
+const conversionSchema = z.object({
+  target_type: z.enum(['sales_order', 'pro_forma_invoice', 'delivery_challan', 'packing_list', 'invoice', 'goods_receipt']),
+  due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  expected_at: z.string().datetime().optional(),
+  notes: z.string().max(10000).optional(),
+  items: z.array(z.object({
+    line_id: z.coerce.number().int().positive(),
+    quantity: z.coerce.number().positive(),
+    batch_no: z.string().max(100).optional(),
+    expires_at: z.string().datetime().optional()
+  })).max(500).optional()
+});
+const fiscalAdjustmentSchema = z.object({
+  invoice_id: z.coerce.number().int().positive().optional(),
+  trade_document_id: z.coerce.number().int().positive().optional(),
+  warehouse_id: z.coerce.number().int().positive().optional(),
+  reason: z.string().trim().min(1).max(2000),
+  affects_stock: z.boolean().default(false),
+  lines: z.array(z.object({
+    product_id: z.coerce.number().int().positive().optional(),
+    variant_id: z.coerce.number().int().positive().optional(),
+    description: z.string().trim().min(1).max(500),
+    quantity: z.coerce.number().positive(),
+    unit: z.string().trim().min(1).max(50).default('piece'),
+    rate: z.coerce.number().nonnegative(),
+    discount: z.coerce.number().nonnegative().default(0),
+    tax_rate: z.coerce.number().min(0).max(100).default(0),
+    metadata: z.record(z.string(), z.unknown()).optional()
+  })).min(1).max(500)
+});
+const documentTemplateSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  document_type: z.string().trim().min(1).max(100),
+  format: z.enum(['A4', 'THERMAL']).default('A4'),
+  configuration: z.record(z.string(), z.unknown()).default({}),
+  is_default: z.boolean().default(false),
+  status: z.enum(['active', 'inactive']).default('active')
 });
 
 router.post('/auth/login', validate(loginSchema), asyncRoute(async (req, res) => {
@@ -991,6 +1039,10 @@ router.post('/trade/:documentType/:id/transition', requirePermission('trade.tran
 })), mutation(async req => ({
   body: await transitionTradeDocument(req.tenantDb, req.params.id, req.body.status, req.body, req)
 })));
+router.post('/trade/:documentType/:id/convert', requirePermission('trade.create'), validate(conversionSchema), mutation(async req => ({
+  status: 201,
+  body: await convertDocument(req.tenantDb, req.params.id, req.body, req)
+})));
 router.post('/trade/purchase-orders/:id/receive', requirePermission('trade.purchases.receive'), validate(z.object({
   warehouse_id: z.coerce.number().int().positive().optional(),
   notes: z.string().max(2000).optional(),
@@ -1040,6 +1092,41 @@ router.post('/approvals/:id/approve', requirePermission('approvals.approve'), va
 })));
 router.post('/approvals/:id/reject', requirePermission('approvals.reject'), validate(z.object({ notes: z.string().max(2000).optional() })), mutation(async req => ({
   body: await decideApproval(req.tenantDb, req.params.id, 'reject', req.body.notes, req)
+})));
+
+router.get('/document-links', requirePermission('trade.read'), asyncRoute(async (req, res) => {
+  res.json({ links: await listDocumentLinks(req.tenantDb, req.query) });
+}));
+router.get('/document-templates', requirePermission('settings.manage'), asyncRoute(async (req, res) => {
+  res.json({ templates: await listDocumentTemplates(req.tenantDb, req.query) });
+}));
+router.post('/document-templates', requirePermission('settings.manage'), validate(documentTemplateSchema), mutation(async req => ({
+  status: 201,
+  body: await saveDocumentTemplate(req.tenantDb, null, req.body, req)
+})));
+router.put('/document-templates/:id', requirePermission('settings.manage'), validate(documentTemplateSchema), mutation(async req => ({
+  body: await saveDocumentTemplate(req.tenantDb, req.params.id, req.body, req)
+})));
+router.get('/fiscal-adjustments/:adjustmentType', requirePermission('trade.read'), asyncRoute(async (req, res) => {
+  res.json({ adjustments: await listFiscalAdjustments(req.tenantDb, req.params.adjustmentType, req.query) });
+}));
+router.post('/fiscal-adjustments/:adjustmentType', requirePermission('trade.create'), validate(fiscalAdjustmentSchema), mutation(async req => ({
+  status: 201,
+  body: await createFiscalAdjustment(req.tenantDb, req.params.adjustmentType, req.body, req)
+})));
+router.get('/fiscal-adjustments/:adjustmentType/:id', requirePermission('trade.read'), asyncRoute(async (req, res) => {
+  const adjustment = await getFiscalAdjustment(req.tenantDb, req.params.id);
+  const requested = req.params.adjustmentType.replace(/-/g, '_').toUpperCase().replace(/S$/, '');
+  if (adjustment.adjustment_type !== requested) throw httpError(404, 'fiscal_adjustment_not_found', 'The fiscal adjustment was not found.');
+  res.json(adjustment);
+}));
+router.post('/fiscal-adjustments/:adjustmentType/:id/issue', requirePermission('trade.transition'), validate(z.object({})), mutation(async req => ({
+  body: await transitionFiscalAdjustment(req.tenantDb, req.params.id, 'issue', req.body, req)
+})));
+router.post('/fiscal-adjustments/:adjustmentType/:id/cancel', requirePermission('trade.transition'), validate(z.object({
+  reason: z.string().trim().min(1).max(2000)
+})), mutation(async req => ({
+  body: await transitionFiscalAdjustment(req.tenantDb, req.params.id, 'cancel', req.body, req)
 })));
 
 router.get('/dashboard/summary', requirePermission('dashboard.read'), asyncRoute(async (req, res) => {

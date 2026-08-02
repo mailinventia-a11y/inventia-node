@@ -114,6 +114,20 @@ export const phase5OpenApi = {
       get: { summary: 'List trade documents', responses: { 200: { description: 'Documents' } } },
       post: { summary: 'Create trade document', responses: { 201: { description: 'Created' } } }
     },
+    '/trade/{documentType}/{id}/convert': { post: { summary: 'Create an auditable linked document without mutating the source', responses: { 201: { description: 'Linked document created' }, 409: { description: 'Invalid or duplicate conversion' } } } },
+    '/document-links': { get: { summary: 'List the conversion and fiscal chain for an entity', responses: { 200: { description: 'Document links' } } } },
+    '/document-templates': {
+      get: { summary: 'List organization document templates', responses: { 200: { description: 'Templates' } } },
+      post: { summary: 'Create an A4 or thermal document template', responses: { 201: { description: 'Template created' } } }
+    },
+    '/document-templates/{id}': { put: { summary: 'Update a document template', responses: { 200: { description: 'Template updated' } } } },
+    '/fiscal-adjustments/{adjustmentType}': {
+      get: { summary: 'List credit or debit notes', responses: { 200: { description: 'Fiscal adjustments' } } },
+      post: { summary: 'Create an immutable-source fiscal adjustment draft', responses: { 201: { description: 'Draft created' } } }
+    },
+    '/fiscal-adjustments/{adjustmentType}/{id}': { get: { summary: 'Get a fiscal adjustment with lines, chain, and timeline', responses: { 200: { description: 'Fiscal adjustment' } } } },
+    '/fiscal-adjustments/{adjustmentType}/{id}/issue': { post: { summary: 'Issue a fiscal adjustment and post its ledger and optional stock effect', responses: { 200: { description: 'Adjustment issued' } } } },
+    '/fiscal-adjustments/{adjustmentType}/{id}/cancel': { post: { summary: 'Cancel an unissued fiscal adjustment draft', responses: { 200: { description: 'Draft cancelled' }, 409: { description: 'Issued note is immutable' } } } },
     '/dashboard/summary': { get: { summary: 'Organization dashboard summary', responses: { 200: { description: 'Summary' } } } },
     '/pos/checkout': {
       post: {

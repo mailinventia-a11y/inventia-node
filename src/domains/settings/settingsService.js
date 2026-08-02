@@ -43,8 +43,28 @@ export const SETTINGS_DEFAULTS = Object.freeze({
     price_decimals: 2,
     quantity_decimals: 3,
     margins: { top: 10, right: 10, bottom: 10, left: 10 },
+    numbering: {
+      quotation_prefix: 'QT', sales_order_prefix: 'SO', purchase_order_prefix: 'PO',
+      pro_forma_prefix: 'PI', delivery_prefix: 'DC', packing_list_prefix: 'PL',
+      credit_note_prefix: 'CN', debit_note_prefix: 'DN', padding: 6, yearly_reset: false
+    },
+    template: 'GST Invoice A4',
+    language: 'en-IN',
+    font_family: 'Inter',
+    striped_rows: false,
+    show_company_logo: true,
+    show_signature: true,
+    watermark: '',
+    header_text: '',
+    footer_text: '',
+    signature_name: '',
+    thermal_receipt_footer: '',
     default_notes: '',
-    default_terms: ''
+    default_terms: '',
+    notes_by_type: {},
+    terms_by_type: {},
+    email_template: '',
+    whatsapp_template: ''
   },
   pos: {
     active: true,
@@ -101,6 +121,7 @@ export const FEATURE_FLAG_DEFAULTS = Object.freeze({
   settings_namespaces: { enabled: true, configuration: {} },
   navigation_v2: { enabled: false, configuration: {} },
   trade_workspaces: { enabled: false, configuration: {} },
+  document_engine_v2: { enabled: false, configuration: {} },
   notifications_v2: { enabled: false, configuration: {} }
 });
 

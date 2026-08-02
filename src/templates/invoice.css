@@ -30,6 +30,20 @@ body {
   padding: 0 0 9mm;
 }
 
+.invoice-watermark {
+  position: fixed;
+  inset: 42% 0 auto;
+  z-index: 0;
+  color: var(--border-color);
+  font-size: 42pt;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: center;
+  transform: rotate(-24deg);
+  opacity: 0.28;
+  pointer-events: none;
+}
+
 .invoice-container {
   width: 100%;
   max-width: 210mm; /* A4 Width */

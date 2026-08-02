@@ -10,6 +10,8 @@
 </head>
 <body>
 
+{{WATERMARK_HTML}}
+
 <div class="invoice-container">
   <!-- 1. Header Area -->
   <table class="header-table">
@@ -181,13 +183,13 @@
       <td>
         <div style="font-size: 8pt; margin-bottom: 8mm; color: var(--text-muted);">For {{companyName}}</div>
         <div class="signature-line"></div>
-        <div class="signature-label">Authorized Signatory</div>
+        <div class="signature-label">{{authorizedSignatory}}</div>
       </td>
     </tr>
   </table>
 </div>
 <footer class="print-footer">
-  Computer-generated GST invoice · {{invoiceNumber}}
+  {{printFooter}}
 </footer>
 
 </body>

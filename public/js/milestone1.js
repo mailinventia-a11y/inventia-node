@@ -1,11 +1,17 @@
 const TRADE_VIEWS = Object.freeze({
   quotations: { title: 'Quotations', singular: 'Quotation', party: 'customer', icon: 'fa-file-signature' },
   'sales-orders': { title: 'Sales Orders', singular: 'Sales order', party: 'customer', icon: 'fa-boxes-packing', fulfill: true },
+  'pro-forma-invoices': { title: 'Pro Forma Invoices', singular: 'Pro forma invoice', party: 'customer', icon: 'fa-file-invoice-dollar' },
   'purchase-orders': { title: 'Purchase Orders', singular: 'Purchase order', party: 'supplier', icon: 'fa-file-circle-check', receive: true },
   deliveries: { title: 'Delivery Challans', singular: 'Delivery challan', party: 'customer', icon: 'fa-truck' },
   'packing-lists': { title: 'Packing Lists', singular: 'Packing list', party: 'customer', icon: 'fa-box-open' },
   'sales-returns': { title: 'Sales Returns', singular: 'Sales return', party: 'customer', icon: 'fa-arrow-rotate-left', return: true },
   'purchase-returns': { title: 'Purchase Returns', singular: 'Purchase return', party: 'supplier', icon: 'fa-arrow-right-arrow-left', return: true }
+});
+
+const FISCAL_VIEWS = Object.freeze({
+  'credit-notes': { title: 'Credit Notes', singular: 'Credit note', source: 'invoice', icon: 'fa-file-circle-minus' },
+  'debit-notes': { title: 'Debit Notes', singular: 'Debit note', source: 'purchase', icon: 'fa-file-circle-plus' }
 });
 
 const INVENTORY_VIEWS = Object.freeze({
@@ -36,7 +42,11 @@ export function installMilestone1({ router, api, store }) {
   registerLegacyRoutes(router);
   Object.keys(TRADE_VIEWS).forEach(view => router.register({
     module: 'trade', view, legacyTab: 'milestone1-workspace', permission: 'trade.read',
-    featureFlag: 'trade_workspaces', load: () => openTradeWorkspace(view, api)
+    featureFlag: view === 'pro-forma-invoices' ? 'document_engine_v2' : 'trade_workspaces', load: () => openTradeWorkspace(view, api)
+  }));
+  Object.keys(FISCAL_VIEWS).forEach(view => router.register({
+    module: 'documents', view, legacyTab: 'milestone1-workspace', permission: 'trade.read',
+    featureFlag: 'document_engine_v2', load: () => openFiscalWorkspace(view, api)
   }));
   router.register({ module: 'trade', view: 'grns', legacyTab: 'milestone1-workspace', permission: 'trade.read', featureFlag: 'trade_workspaces', load: () => openGrns(api) });
   router.register({ module: 'trade', view: 'approvals', legacyTab: 'milestone1-workspace', permission: 'approvals.read', featureFlag: 'trade_workspaces', load: () => openApprovals(api) });
@@ -49,7 +59,7 @@ export function installMilestone1({ router, api, store }) {
     load: () => openSettingsWorkspace(view, api)
   }));
   bindWorkspaceShell(api);
-  window.InventiaMilestone1 = Object.freeze({ openTradeWorkspace, openInventoryWorkspace, openProductDetail, openPartyDetail, openSettingsWorkspace, store });
+  window.InventiaMilestone1 = Object.freeze({ openTradeWorkspace, openFiscalWorkspace, openInventoryWorkspace, openProductDetail, openPartyDetail, openSettingsWorkspace, store });
 }
 
 function registerLegacyRoutes(router) {
@@ -102,6 +112,37 @@ async function openTradeWorkspace(view, api) {
         ['actions', 'Actions', (_value, row) => tradeActions(row, config)]
       ];
       renderRows(currentRows, currentColumns, row => `${row.document_no} ${row.party_name || ''} ${row.status}`);
+    } catch (error) { setError(error); }
+  };
+  await currentLoader();
+}
+
+async function openFiscalWorkspace(view, api) {
+  const config = FISCAL_VIEWS[view];
+  setupWorkspace({
+    title: config.title,
+    description: `Create, review, and issue auditable ${config.title.toLowerCase()} without changing the source document.`,
+    icon: config.icon,
+    panel: config.title
+  });
+  setPrimaryAction(hasPermission('trade.create') ? `New ${config.singular}` : '', () => openFiscalCreate(view, api));
+  setStatusOptions(['DRAFT', 'ISSUED', 'CANCELLED']);
+  currentLoader = async () => {
+    setLoading();
+    try {
+      const result = await api.get(`/fiscal-adjustments/${view}`);
+      currentRows = result.adjustments || [];
+      currentColumns = [
+        ['adjustment_number', 'Document'],
+        ['invoice_number', 'Invoice'],
+        ['source_document_no', 'Purchase document'],
+        ['customer_name', 'Customer'],
+        ['supplier_name', 'Supplier'],
+        ['grand_total', 'Total', money],
+        ['status', 'Status', statusBadge],
+        ['created_at', 'Created', date]
+      ];
+      renderRows(currentRows, currentColumns, row => JSON.stringify(row), row => ({ type: 'fiscal', id: row.id }));
     } catch (error) { setError(error); }
   };
   await currentLoader();
@@ -251,6 +292,10 @@ async function openSettingsWorkspace(namespace, api) {
 
 function setupWorkspace({ title, description, icon, panel }) {
   closeDetail();
+  const workspace = document.getElementById('milestone1-workspace');
+  const breadcrumbCurrent = workspace?.querySelector('.page-breadcrumb strong');
+  if (breadcrumbCurrent) breadcrumbCurrent.textContent = title;
+  workspace?.querySelector('.page-breadcrumb')?.setAttribute('aria-label', `${title} breadcrumb`);
   setText('m1WorkspaceTitle', title);
   setText('m1WorkspaceDescription', description);
   setText('m1PanelTitle', panel);
@@ -318,6 +363,7 @@ function renderKpis(items) {
 
 async function openConfiguredDetail(type, id, api) {
   if (type === 'trade') return openTradeDetail(currentView(), id, api);
+  if (type === 'fiscal') return openFiscalDetail(currentView(), id, api);
   if (type === 'grn') return openGrnDetail(id, api);
   if (type === 'cycle-count') return openCycleCountDetail(id, api);
 }
@@ -330,9 +376,29 @@ async function openTradeDetail(view, id, api) {
       ${detailSection('Summary', detailGrid({ Type: humanize(document.document_type), Status: statusBadge(document.status), Party: document.party_id ? `#${document.party_id}` : '—', Warehouse: document.warehouse_id ? `#${document.warehouse_id}` : '—', Subtotal: money(document.subtotal), Tax: money(document.tax_total), Discount: money(document.discount), Total: money(document.grand_total) }))}
       ${detailSection('Line items', smallTable(document.lines, [['description', 'Description'], ['product_id', 'Product'], ['quantity', 'Qty'], ['fulfilled_quantity', 'Fulfilled'], ['unit_price', 'Rate', money], ['tax_rate', 'GST %'], ['line_total', 'Total', money]]))}
       ${detailSection('Workflow', tradeDetailActions(document, view))}
+      ${detailSection('Document chain', documentLinks(document.links))}
       ${detailSection('Approvals', listCards(document.approvals, item => `<strong>${statusBadge(item.status)}</strong><span>${escapeHtml(item.reason || item.decision_notes || 'No note')}</span>`))}
       ${detailSection('Attachments', attachmentPanel(document.attachments, document.document_type, id))}
       ${detailSection('Timeline', timeline(document.timeline))}
+    `);
+  } catch (error) { notify(error.message, 'error'); }
+}
+
+async function openFiscalDetail(view, id, api) {
+  try {
+    const adjustment = await api.get(`/fiscal-adjustments/${view}/${id}`);
+    currentDetail = { type: 'fiscal', view, id, adjustment };
+    const actions = [];
+    if (adjustment.status === 'DRAFT' && hasPermission('trade.transition')) {
+      actions.push(actionButton('issue-adjustment', id, 'Issue'));
+      actions.push(actionButton('cancel-adjustment', id, 'Cancel'));
+    }
+    openDetail(adjustment.adjustment_number, `
+      ${detailSection('Summary', detailGrid({ Type: humanize(adjustment.adjustment_type), Status: statusBadge(adjustment.status), Party: `#${adjustment.party_id}`, Reason: adjustment.reason, 'Affects stock': yesNo(adjustment.affects_stock), Subtotal: money(adjustment.subtotal), Tax: money(adjustment.tax_total), Total: money(adjustment.grand_total) }))}
+      ${detailSection('Line items', smallTable(adjustment.lines, [['description', 'Description'], ['product_id', 'Product'], ['quantity', 'Qty'], ['unit', 'Unit'], ['rate_minor', 'Rate', minorMoney], ['tax_rate', 'GST %'], ['line_total_minor', 'Total', minorMoney]]))}
+      ${detailSection('Actions', `<div class="panel-actions">${actions.join('') || '<span>No actions available.</span>'}</div>`)}
+      ${detailSection('Document chain', documentLinks(adjustment.links))}
+      ${detailSection('Timeline', timeline(adjustment.timeline))}
     `);
   } catch (error) { notify(error.message, 'error'); }
 }
@@ -376,7 +442,26 @@ function tradeDetailActions(document, view) {
   if (document.status === 'draft' && hasPermission('trade.transition')) buttons.push(actionButton('submit', document.id, 'Submit for approval'));
   if (['draft', 'pending_approval', 'approved', 'partially_fulfilled'].includes(document.status) && hasPermission('trade.transition')) buttons.push(actionButton('cancel', document.id, 'Cancel'));
   if (document.status === 'approved' && TRADE_VIEWS[view]?.return && hasPermission('trade.transition')) buttons.push(actionButton('post-return', document.id, 'Post return'));
+  if (hasPermission('trade.create')) {
+    conversionTargets(document).forEach(target => buttons.push(
+      `<button class="action-btn secondary compact" data-m1-action="convert-document" data-id="${document.id}" data-target="${target.value}">${escapeHtml(target.label)}</button>`
+    ));
+  }
   return `<div class="panel-actions">${buttons.join('') || '<span>No actions available.</span>'}</div>`;
+}
+
+function conversionTargets(document) {
+  if (document.document_type === 'quotation' && ['approved', 'completed'].includes(document.status)) {
+    return [{ value: 'sales_order', label: 'Convert to sales order' }, { value: 'pro_forma_invoice', label: 'Create pro forma' }];
+  }
+  if (document.document_type === 'sales_order' && document.status === 'approved') {
+    return [
+      { value: 'delivery_challan', label: 'Create delivery challan' },
+      { value: 'packing_list', label: 'Create packing list' },
+      { value: 'invoice', label: 'Create invoice' }
+    ];
+  }
+  return [];
 }
 
 function approvalActions(_value, row) {
@@ -403,6 +488,15 @@ async function runConfiguredAction(button, api) {
   if (action === 'download-file') return downloadAttachment(button.dataset.key, button.dataset.name, api);
   if (action === 'add-variant') return openVariantForm(id, api);
   if (action === 'map-supplier') return openSupplierMappingForm(id, api);
+  if (action === 'convert-document') return openConversionForm(currentView(), id, button.dataset.target, api);
+  if (action === 'issue-adjustment') {
+    await mutate(() => api.post(`/fiscal-adjustments/${currentView()}/${id}/issue`, {}), 'Fiscal note issued.');
+    return openFiscalDetail(currentView(), id, api);
+  }
+  if (action === 'cancel-adjustment') {
+    await mutate(() => api.post(`/fiscal-adjustments/${currentView()}/${id}/cancel`, { reason: 'Cancelled before issue.' }), 'Draft fiscal note cancelled.');
+    return openFiscalDetail(currentView(), id, api);
+  }
   const actions = {
     submit: () => api.post(`/trade/${view}/${id}/transition`, { status: 'pending_approval' }),
     cancel: () => api.post(`/trade/${view}/${id}/transition`, { status: 'cancelled', reason: 'Cancelled by user.' }),
@@ -416,6 +510,66 @@ async function runConfiguredAction(button, api) {
   await mutate(actions[action], `${humanize(action)} completed.`);
   closeDetail();
   await currentLoader();
+}
+
+function openConversionForm(view, id, target, api) {
+  const invoiceFields = target === 'invoice'
+    ? '<div class="form-group"><label>Due date</label><input name="due_date" type="date" required></div>'
+    : '';
+  openDetail('Convert document', `<form id="m2ConversionForm" class="workspace-settings-form"><div class="workspace-form-grid"><div class="form-group"><label>Target</label><input value="${escapeHtml(humanize(target))}" disabled></div>${invoiceFields}<div class="form-group full"><label>Notes</label><textarea name="notes" rows="4"></textarea></div></div><p class="workspace-inline-state">The source record remains unchanged and the new document will be linked in its audit chain.</p><button class="action-btn primary" type="submit">Create linked document</button></form>`);
+  document.getElementById('m2ConversionForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const data = new FormData(event.target);
+    const body = { target_type: target, notes: data.get('notes') || undefined };
+    if (data.get('due_date')) body.due_date = data.get('due_date');
+    await mutate(() => api.post(`/trade/${view}/${id}/convert`, body), 'Linked document created.');
+    closeDetail();
+    await currentLoader();
+  });
+}
+
+async function openFiscalCreate(view, api) {
+  const config = FISCAL_VIEWS[view];
+  const [sources, products, warehouses] = await Promise.all([
+    config.source === 'invoice' ? api.get('/invoices') : api.get('/trade/purchase-orders'),
+    api.get('/products?limit=500'),
+    api.get('/reference/warehouses')
+  ]);
+  const sourceItems = (config.source === 'invoice' ? sources.invoices : sources.documents).map(item => ({
+    ...item,
+    name: config.source === 'invoice' ? `${item.invoice_number} · ${item.customer_name || 'Customer'}` : `${item.document_no} · ${item.party_name || 'Supplier'}`
+  }));
+  const sourceName = config.source === 'invoice' ? 'invoice_id' : 'trade_document_id';
+  const sourceLabel = config.source === 'invoice' ? 'Invoice' : 'Purchase document';
+  openDetail(`New ${config.singular}`, `<form id="m2FiscalForm" class="workspace-settings-form"><div class="workspace-form-grid">${selectField(sourceName, sourceLabel, sourceItems, true)}${selectField('warehouse_id', 'Warehouse (for stock)', warehouses.items, false)}<div class="form-group full"><label>Reason</label><textarea name="reason" required></textarea></div><label class="form-check"><input name="affects_stock" type="checkbox"> Post a linked stock movement on issue</label></div><h4>Adjustment line</h4><div class="workspace-form-grid">${selectField('product_id', 'Product', products.products, false)}<div class="form-group"><label>Description</label><input name="description" required></div><div class="form-group"><label>Quantity</label><input name="quantity" type="number" min="0.001" step="0.001" value="1" required></div><div class="form-group"><label>Unit</label><input name="unit" value="piece" required></div><div class="form-group"><label>Rate</label><input name="rate" type="number" min="0" step="0.01" required></div><div class="form-group"><label>Discount</label><input name="discount" type="number" min="0" step="0.01" value="0"></div><div class="form-group"><label>GST %</label><input name="tax_rate" type="number" min="0" max="100" step="0.01" value="0"></div></div><button class="action-btn primary" type="submit">Save draft</button></form>`);
+  const form = document.getElementById('m2FiscalForm');
+  form.elements.product_id.addEventListener('change', event => {
+    const product = products.products.find(item => String(item.id) === event.target.value);
+    if (!product) return;
+    form.elements.description.value = product.name;
+    form.elements.unit.value = product.uom || 'piece';
+    form.elements.rate.value = Number(config.source === 'invoice' ? product.selling_price : product.cost_price || 0).toFixed(2);
+    form.elements.tax_rate.value = Number(product.gst_rate || 0);
+  });
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const data = new FormData(form);
+    const body = {
+      [sourceName]: Number(data.get(sourceName)),
+      warehouse_id: Number(data.get('warehouse_id')) || undefined,
+      reason: data.get('reason'),
+      affects_stock: form.elements.affects_stock.checked,
+      lines: [{
+        product_id: Number(data.get('product_id')) || undefined,
+        description: data.get('description'), quantity: Number(data.get('quantity')),
+        unit: data.get('unit'), rate: Number(data.get('rate')),
+        discount: Number(data.get('discount') || 0), tax_rate: Number(data.get('tax_rate') || 0)
+      }]
+    };
+    await mutate(() => api.post(`/fiscal-adjustments/${view}`, body), `${config.singular} draft created.`);
+    closeDetail();
+    await currentLoader();
+  });
 }
 
 function openVariantForm(productId, api) {
@@ -620,6 +774,7 @@ function notify(message, type) { window.showToast?.(message, type); }
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char])); }
 function humanize(value) { return escapeHtml(String(value ?? '—').replace(/[_-]/g, ' ').replace(/\b\w/g, char => char.toUpperCase())); }
 function money(value) { return `₹${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
+function minorMoney(value) { return money(Number(value || 0) / 100); }
 function number(value) { return Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 }); }
 function date(value) { return value ? new Date(value).toLocaleDateString('en-IN') : '—'; }
 function yesNo(value) { return value ? 'Yes' : 'No'; }
@@ -629,6 +784,7 @@ function detailSection(title, body) { return `<section class="workspace-detail-s
 function detailGrid(values) { return `<div class="workspace-detail-grid">${Object.entries(values).map(([label, value]) => `<div><span>${escapeHtml(label)}</span><div>${formatCell(value)}</div></div>`).join('')}</div>`; }
 function listCards(items, renderer) { return items?.length ? `<div class="workspace-timeline">${items.map(item => `<div>${renderer(item)}</div>`).join('')}</div>` : '<p>No records.</p>'; }
 function timeline(items) { return listCards(items, item => `<strong>${humanize(item.event_type)}</strong><small>${date(item.created_at)}</small><p>${escapeHtml(item.message || '')}</p>`); }
+function documentLinks(items) { return listCards(items, item => `<strong>${humanize(item.relationship_type)}</strong><span>${humanize(item.source_entity_type)} #${item.source_entity_id} → ${humanize(item.target_entity_type)} #${item.target_entity_id}</span><small>${date(item.created_at)}</small>`); }
 function smallTable(rows, columns) { return rows?.length ? `<div class="table-container"><table><thead><tr>${columns.map(([, label]) => `<th>${escapeHtml(label)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${columns.map(([key,, formatter]) => `<td>${formatCell(formatter ? formatter(row[key], row) : row[key])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '<p>No records.</p>'; }
 function options(items, label = item => item.name) { return (items || []).map(item => `<option value="${item.id}">${escapeHtml(label(item))}</option>`).join(''); }
 function selectField(name, label, items, required) { return `<div class="form-group"><label>${escapeHtml(label)}</label><select name="${name}" ${required ? 'required' : ''}><option value="">Select</option>${options(items)}</select></div>`; }
