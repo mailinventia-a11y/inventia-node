@@ -124,6 +124,17 @@ test('purchase approval and GRN receiving preserve explicit workflow states', as
   assert.match(receipt.receipt_no, /^GRN-/);
   const refreshed = await trade.getTradeDocument(db, order.id);
   assert.equal(refreshed.status, 'fulfilled');
+
+  const cancelledOrder = await trade.createTradeDocument(db, 'purchase-orders', {
+    party_id: supplier.id,
+    warehouse_id: 1,
+    lines: [{ product_id: product.id, quantity: 1, unit_price: 42 }]
+  }, request);
+  await trade.transitionTradeDocument(db, cancelledOrder.id, 'pending_approval', {}, request);
+  await trade.transitionTradeDocument(db, cancelledOrder.id, 'cancelled', { reason: 'No longer required.' }, request);
+  const cancelledApproval = await db.one(`SELECT * FROM approval_requests WHERE entity_type = 'purchase_order' AND entity_id = ?`, [String(cancelledOrder.id)]);
+  assert.equal(cancelledApproval.status, 'rejected');
+  assert.equal(cancelledApproval.decision_notes, 'No longer required.');
 });
 
 test('idempotency replays the committed response and rejects key reuse', async () => {

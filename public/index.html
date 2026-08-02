@@ -45,54 +45,55 @@
     
     <nav class="nav-menu">
       <p class="nav-section-label">Workspace</p>
-      <button class="nav-btn active" data-tab="dashboard">
-        <i class="fa-solid fa-house"></i> Home
-      </button>
-      <button class="nav-btn" data-tab="invoices">
-        <i class="fa-solid fa-file-invoice"></i> Invoices
-      </button>
-      <div class="nav-dropdown-wrapper" id="dropdownOperations">
-        <button class="nav-btn nav-dropdown-trigger">
-          <i class="fa-solid fa-bolt"></i> Operations <i class="fa-solid fa-chevron-down caret"></i>
-        </button>
+      <button class="nav-btn active" data-tab="dashboard" data-module="workspace" data-view="home" data-permission="dashboard.read"><i class="fa-solid fa-house"></i> Home</button>
+
+      <div class="nav-dropdown-wrapper" id="dropdownSales">
+        <button class="nav-btn nav-dropdown-trigger"><i class="fa-solid fa-cart-shopping"></i> Sales <i class="fa-solid fa-chevron-down caret"></i></button>
         <div class="nav-dropdown-content">
-          <button class="nav-dropdown-item" data-tab="sales-page">
-            <i class="fa-solid fa-receipt"></i> Orders
-          </button>
-          <button class="nav-dropdown-item" data-tab="pos">
-            <i class="fa-solid fa-cart-shopping"></i> Sales
-          </button>
-          <button class="nav-dropdown-item" data-tab="purchases">
-            <i class="fa-solid fa-bag-shopping"></i> Purchases
-          </button>
-          <button class="nav-dropdown-item" data-tab="customers">
-            <i class="fa-solid fa-users"></i> Customers
-          </button>
-          <button class="nav-dropdown-item" data-tab="suppliers">
-            <i class="fa-solid fa-truck-field"></i> Suppliers
-          </button>
-          <button class="nav-dropdown-item" data-tab="finance">
-            <i class="fa-solid fa-credit-card"></i> Payments
-          </button>
-          <button class="nav-dropdown-item" data-tab="finance">
-            <i class="fa-solid fa-wallet"></i> Expenses
-          </button>
+          <button class="nav-dropdown-item" data-tab="invoices" data-module="sales" data-view="invoices" data-permission="trade.sales.read"><i class="fa-solid fa-file-invoice"></i> Invoices</button>
+          <button class="nav-dropdown-item" data-tab="pos" data-module="sales" data-view="pos" data-permission="trade.sales.create"><i class="fa-solid fa-cash-register"></i> POS Billing</button>
         </div>
       </div>
-      <div class="nav-dropdown-wrapper" id="dropdownInventory">
-        <button class="nav-btn nav-dropdown-trigger">
-          <i class="fa-solid fa-boxes-stacked"></i> Inventory <i class="fa-solid fa-chevron-down caret"></i>
-        </button>
+
+      <div class="nav-dropdown-wrapper" id="dropdownTradeDocuments">
+        <button class="nav-btn nav-dropdown-trigger"><i class="fa-solid fa-file-contract"></i> Trade Documents <i class="fa-solid fa-chevron-down caret"></i></button>
         <div class="nav-dropdown-content">
-          <button class="nav-dropdown-item" data-tab="inventory">
-            <i class="fa-solid fa-cube"></i> Products
-          </button>
-          <button class="nav-dropdown-item" data-tab="transfers">
-            <i class="fa-solid fa-arrow-right-arrow-left"></i> Stock Movement
-          </button>
-          <button class="nav-dropdown-item" data-tab="transfers">
-            <i class="fa-solid fa-truck-ramp-box"></i> Stock Transfer
-          </button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="trade" data-view="quotations" data-permission="trade.read"><i class="fa-solid fa-file-signature"></i> Quotations</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="trade" data-view="sales-orders" data-permission="trade.read"><i class="fa-solid fa-boxes-packing"></i> Sales Orders</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="trade" data-view="deliveries" data-permission="trade.read"><i class="fa-solid fa-truck"></i> Delivery Challans</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="trade" data-view="packing-lists" data-permission="trade.read"><i class="fa-solid fa-box-open"></i> Packing Lists</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="trade" data-view="sales-returns" data-permission="trade.read"><i class="fa-solid fa-arrow-rotate-left"></i> Sales Returns</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="trade" data-view="purchase-returns" data-permission="trade.read"><i class="fa-solid fa-arrow-right-arrow-left"></i> Purchase Returns</button>
+        </div>
+      </div>
+
+      <div class="nav-dropdown-wrapper" id="dropdownPurchases">
+        <button class="nav-btn nav-dropdown-trigger"><i class="fa-solid fa-bag-shopping"></i> Purchases <i class="fa-solid fa-chevron-down caret"></i></button>
+        <div class="nav-dropdown-content">
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="trade" data-view="purchase-orders" data-permission="trade.read"><i class="fa-solid fa-file-circle-check"></i> Purchase Orders</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="trade" data-view="grns" data-permission="trade.read"><i class="fa-solid fa-clipboard-check"></i> GRNs</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="trade" data-view="approvals" data-permission="approvals.read"><i class="fa-solid fa-user-check"></i> Approvals</button>
+        </div>
+      </div>
+
+      <div class="nav-dropdown-wrapper" id="dropdownInventory">
+        <button class="nav-btn nav-dropdown-trigger"><i class="fa-solid fa-boxes-stacked"></i> Inventory <i class="fa-solid fa-chevron-down caret"></i></button>
+        <div class="nav-dropdown-content">
+          <button class="nav-dropdown-item" data-tab="inventory" data-module="inventory" data-view="products" data-permission="products.read"><i class="fa-solid fa-cube"></i> Products</button>
+          <button class="nav-dropdown-item" data-tab="brands-categories" data-module="inventory" data-view="categories-brands" data-permission="products.read"><i class="fa-solid fa-layer-group"></i> Categories &amp; Brands</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="inventory" data-view="variants" data-permission="products.read"><i class="fa-solid fa-tags"></i> Variants</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="inventory" data-view="price-lists" data-permission="products.read"><i class="fa-solid fa-indian-rupee-sign"></i> Price Lists</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="inventory" data-view="supplier-mappings" data-permission="products.read"><i class="fa-solid fa-link"></i> Supplier Mappings</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="inventory" data-view="balances" data-permission="inventory.read"><i class="fa-solid fa-scale-balanced"></i> Inventory Balances</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="inventory" data-view="movements" data-permission="inventory.read"><i class="fa-solid fa-clock-rotate-left"></i> Stock Timeline</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="inventory" data-view="adjustments" data-permission="inventory.adjust"><i class="fa-solid fa-sliders"></i> Adjustments &amp; Damage</button>
+          <button class="nav-dropdown-item" data-tab="transfers" data-module="inventory" data-view="transfers" data-permission="inventory.transfer"><i class="fa-solid fa-truck-ramp-box"></i> Transfers</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="inventory" data-view="batches" data-permission="inventory.read"><i class="fa-solid fa-calendar-days"></i> Batches &amp; Expiry</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="inventory" data-view="serials" data-permission="inventory.read"><i class="fa-solid fa-hashtag"></i> Serial Numbers</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="inventory" data-view="reservations" data-permission="inventory.read"><i class="fa-solid fa-lock"></i> Reservations</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="inventory" data-view="cycle-counts" data-permission="inventory.read"><i class="fa-solid fa-list-check"></i> Cycle Counts</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="inventory" data-view="reorder-rules" data-permission="inventory.read"><i class="fa-solid fa-arrow-trend-up"></i> Reorder Rules</button>
+          <button class="nav-dropdown-item" data-tab="milestone1-workspace" data-module="inventory" data-view="valuation" data-permission="inventory.read"><i class="fa-solid fa-coins"></i> Valuation</button>
         </div>
       </div>
       <div class="nav-dropdown-wrapper" id="dropdownBarcodes">
@@ -113,51 +114,19 @@
           <button class="nav-dropdown-item" data-tab="barcodes" data-barcode-view="settings"><i class="fa-solid fa-sliders"></i> Settings</button>
         </div>
       </div>
-      <div class="nav-dropdown-wrapper" id="dropdownFinance">
-        <button class="nav-btn nav-dropdown-trigger">
-          <i class="fa-solid fa-indian-rupee-sign"></i> Finance <i class="fa-solid fa-chevron-down caret"></i>
-        </button>
+      <div class="nav-dropdown-wrapper" id="dropdownParties">
+        <button class="nav-btn nav-dropdown-trigger"><i class="fa-solid fa-handshake"></i> Parties <i class="fa-solid fa-chevron-down caret"></i></button>
         <div class="nav-dropdown-content">
-          <button class="nav-dropdown-item" data-tab="invoices"><i class="fa-solid fa-file-invoice"></i> Invoices</button>
-          <button class="nav-dropdown-item" data-tab="finance"><i class="fa-solid fa-money-bill-transfer"></i> Cash Flow</button>
-          <button class="nav-dropdown-item" data-tab="finance"><i class="fa-solid fa-building-columns"></i> Reconciliation</button>
+          <button class="nav-dropdown-item" data-tab="customers" data-module="parties" data-view="customers" data-permission="parties.customers.read"><i class="fa-solid fa-users"></i> Customers</button>
+          <button class="nav-dropdown-item" data-tab="suppliers" data-module="parties" data-view="suppliers" data-permission="parties.suppliers.read"><i class="fa-solid fa-truck-field"></i> Suppliers</button>
         </div>
       </div>
-      <div class="nav-dropdown-wrapper" id="dropdownCrm">
-        <button class="nav-btn nav-dropdown-trigger">
-          <i class="fa-solid fa-handshake"></i> CRM <i class="fa-solid fa-chevron-down caret"></i>
-        </button>
-        <div class="nav-dropdown-content">
-          <button class="nav-dropdown-item" data-tab="crm"><i class="fa-solid fa-bullseye"></i> Leads</button>
-          <button class="nav-dropdown-item" data-tab="customers"><i class="fa-solid fa-users"></i> Customers</button>
-          <button class="nav-dropdown-item" data-tab="crm"><i class="fa-solid fa-arrows-rotate"></i> Follow-ups</button>
-          <button class="nav-dropdown-item" data-tab="crm"><i class="fa-solid fa-briefcase"></i> Deals</button>
-        </div>
-      </div>
-      <div class="nav-dropdown-wrapper" id="dropdownTeam">
-        <button class="nav-btn nav-dropdown-trigger">
-          <i class="fa-solid fa-user-group"></i> Team <i class="fa-solid fa-chevron-down caret"></i>
-        </button>
-        <div class="nav-dropdown-content">
-          <button class="nav-dropdown-item" data-tab="staff"><i class="fa-solid fa-id-badge"></i> Employees</button>
-          <button class="nav-dropdown-item" data-tab="staff"><i class="fa-solid fa-shield-halved"></i> Roles</button>
-          <button class="nav-dropdown-item" data-tab="staff"><i class="fa-solid fa-clock"></i> Attendance</button>
-        </div>
-      </div>
+
+      <button class="nav-btn" data-tab="finance" data-module="finance" data-view="overview" data-permission="finance.read"><i class="fa-solid fa-wallet"></i> Finance</button>
       <p class="nav-section-label nav-section-secondary">Tools</p>
-      <button class="nav-btn" data-tab="reports">
-        <i class="fa-solid fa-chart-simple"></i> Analytics
-      </button>
-      <button class="nav-btn" data-tab="automation">
-        <i class="fa-solid fa-wand-magic-sparkles"></i> Automation
-        <span class="nav-badge new">New</span>
-      </button>
-      <button class="nav-btn" data-tab="marketplace">
-        <i class="fa-solid fa-store"></i> Marketplace
-      </button>
-      <button class="nav-btn" data-tab="settings-tab">
-        <i class="fa-solid fa-gear"></i> Settings
-      </button>
+      <button class="nav-btn" data-tab="reports" data-module="insights" data-view="analytics" data-permission="reports.read"><i class="fa-solid fa-chart-simple"></i> Analytics</button>
+      <button class="nav-btn" data-tab="automation" data-module="ai" data-view="copilot" data-permission="ai.read"><i class="fa-solid fa-wand-magic-sparkles"></i> Inventia AI <span class="nav-badge new">AI</span></button>
+      <button class="nav-btn" data-tab="settings-tab" data-module="settings" data-view="organization" data-permission="settings.manage"><i class="fa-solid fa-gear"></i> Settings</button>
       <button class="nav-btn logout-btn" onclick="logout()">
         <i class="fa-solid fa-right-from-bracket"></i> Logout
       </button>
@@ -1962,6 +1931,28 @@
           </table>
         </div>
       </div>
+    </section>
+
+    <!-- MILESTONE 1: shared operational workspace -->
+    <section id="milestone1-workspace" class="tab-panel workspace-page">
+      <div class="workspace-page-hero">
+        <div class="workspace-page-icon blue" id="m1WorkspaceIcon"><i class="fa-solid fa-layer-group"></i></div>
+        <div><p class="eyebrow" id="m1WorkspaceEyebrow">Operational workspace</p><h2 id="m1WorkspaceTitle">Workspace</h2><p id="m1WorkspaceDescription">Loading your organization data.</p></div>
+        <div class="panel-actions" id="m1WorkspaceActions"></div>
+      </div>
+      <div class="kpi-grid" id="m1WorkspaceKpis" hidden></div>
+      <div class="grid-panel">
+        <div class="panel-title-row">
+          <div><h3 id="m1PanelTitle">Records</h3><p id="m1PanelDescription">Tenant-scoped and permission controlled.</p></div>
+          <div class="panel-actions"><input id="m1Search" class="workspace-search-input" type="search" placeholder="Search" aria-label="Search workspace"><select id="m1StatusFilter" aria-label="Filter status"><option value="">All statuses</option></select><button class="action-btn secondary compact" id="m1Refresh" type="button"><i class="fa-solid fa-rotate"></i> Refresh</button></div>
+        </div>
+        <div id="m1WorkspaceState" class="workspace-inline-state" role="status">Loading…</div>
+        <div class="table-container" id="m1WorkspaceTable"></div>
+      </div>
+      <aside class="workspace-detail-drawer" id="m1DetailDrawer" aria-hidden="true">
+        <div class="modal-header"><h3 id="m1DetailTitle">Details</h3><button class="action-btn secondary compact" type="button" id="m1DetailClose" aria-label="Close details"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="workspace-detail-body" id="m1DetailBody"></div>
+      </aside>
     </section>
 
     <!-- WORKSPACE: Purchases -->

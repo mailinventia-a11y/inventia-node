@@ -1267,6 +1267,7 @@ router.post('/attachments', requirePermission('trade.update'), upload.single('fi
   const entityType = String(req.body.entity_type || '');
   const entityId = String(req.body.entity_id || '');
   if (!entityType || !entityId) throw httpError(422, 'attachment_target_required', 'entity_type and entity_id are required.');
+  await assertAttachmentTarget(req.tenantDb, entityType, entityId);
   const result = await executeIdempotent(req, async () => {
     const stored = await storage.put({
       organizationId: req.user.organization_id,
@@ -1406,6 +1407,19 @@ function mutation(handler) {
 
 function insertWithId(db, sql, params) {
   return db.run(`${sql}${db.dialect === 'postgres' ? ' RETURNING id' : ''}`, params);
+}
+
+async function assertAttachmentTarget(db, entityType, entityId) {
+  const masterTables = { product: 'products', customer: 'customers', supplier: 'suppliers' };
+  if (masterTables[entityType]) {
+    const target = await db.one(`SELECT id FROM ${masterTables[entityType]} WHERE id = ?`, [entityId]);
+    if (!target) throw httpError(404, 'attachment_target_not_found', 'The attachment target was not found.');
+    return;
+  }
+  const tradeTypes = new Set(['quotation', 'sales_order', 'purchase_order', 'delivery_challan', 'packing_list', 'invoice', 'sales_return', 'purchase_return']);
+  if (!tradeTypes.has(entityType)) throw httpError(422, 'attachment_target_invalid', 'This attachment target type is not supported.');
+  const target = await db.one('SELECT id FROM trade_documents WHERE id = ? AND document_type = ?', [entityId, entityType]);
+  if (!target) throw httpError(404, 'attachment_target_not_found', 'The attachment target was not found.');
 }
 
 function referenceTable(resource) {

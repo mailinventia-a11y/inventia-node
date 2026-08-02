@@ -76,7 +76,7 @@ export async function getProduct(db, id) {
     [id]
   );
   if (!product) throw httpError(404, 'product_not_found', 'Product was not found.');
-  const [variants, suppliers, media, balances, barcodeAssignments] = await Promise.all([
+  const [variants, suppliers, media, balances, barcodeAssignments, attachments] = await Promise.all([
     db.all('SELECT * FROM product_variants WHERE product_id = ? ORDER BY id', [id]),
     db.all(
       `SELECT sp.*, s.name AS supplier_name FROM supplier_products sp
@@ -94,7 +94,8 @@ export async function getProduct(db, id) {
       `SELECT * FROM barcode_assignments
         WHERE product_id = ? AND archived_at IS NULL ORDER BY variant_id, is_primary DESC, id`,
       [id]
-    )
+    ),
+    db.all('SELECT * FROM attachments WHERE entity_type = ? AND entity_id = ? ORDER BY created_at DESC', ['product', String(id)])
   ]);
   return {
     ...normalizeJsonFields(product),
@@ -102,7 +103,8 @@ export async function getProduct(db, id) {
     suppliers,
     media: media.map(normalizeJsonFields),
     balances,
-    barcode_assignments: barcodeAssignments
+    barcode_assignments: barcodeAssignments,
+    attachments
   };
 }
 
@@ -481,13 +483,14 @@ export async function getParty(db, partyType, id) {
     [partyType, id]
   );
   if (!party) throw httpError(404, `${partyType}_not_found`, `${capitalize(partyType)} was not found.`);
-  const [contacts, addresses, communications, documents] = await Promise.all([
+  const [contacts, addresses, communications, documents, attachments] = await Promise.all([
     db.all('SELECT * FROM party_contacts WHERE party_type = ? AND party_id = ? ORDER BY is_primary DESC, name', [partyType, id]),
     db.all('SELECT * FROM party_addresses WHERE party_type = ? AND party_id = ? ORDER BY is_primary DESC, id', [partyType, id]),
     db.all('SELECT * FROM party_communications WHERE party_type = ? AND party_id = ? ORDER BY occurred_at DESC LIMIT 100', [partyType, id]),
-    db.all('SELECT * FROM trade_documents WHERE party_type = ? AND party_id = ? ORDER BY created_at DESC LIMIT 100', [partyType, id])
+    db.all('SELECT * FROM trade_documents WHERE party_type = ? AND party_id = ? ORDER BY created_at DESC LIMIT 100', [partyType, id]),
+    db.all('SELECT * FROM attachments WHERE entity_type = ? AND entity_id = ? ORDER BY created_at DESC', [partyType, String(id)])
   ]);
-  return { ...normalizeJsonFields(party), contacts, addresses, communications, documents: documents.map(normalizeJsonFields) };
+  return { ...normalizeJsonFields(party), contacts, addresses, communications, documents: documents.map(normalizeJsonFields), attachments };
 }
 
 export async function createParty(db, partyType, input, req) {
@@ -792,7 +795,14 @@ export async function transitionTradeDocument(db, id, targetStatus, input, req) 
         [before.document_type, String(id), req.user.id, input.reason || null, now()]
       );
     }
-    if (targetStatus === 'cancelled') await releaseDocumentReservations(tx, before);
+    if (targetStatus === 'cancelled') {
+      await releaseDocumentReservations(tx, before);
+      await tx.run(
+        `UPDATE approval_requests SET status = 'rejected', decision_notes = ?, decided_by = ?, decided_at = ?
+          WHERE entity_type = ? AND entity_id = ? AND status = 'pending'`,
+        [input.reason || 'Document cancelled.', req.user.id, now(), before.document_type, String(id)]
+      );
+    }
     if (targetStatus === 'fulfilled' && ['sales_return', 'purchase_return'].includes(before.document_type)) {
       if (!before.warehouse_id) throw httpError(409, 'warehouse_required', 'A warehouse is required to post this return.');
       for (const line of before.lines) {

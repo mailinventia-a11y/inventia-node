@@ -1319,7 +1319,7 @@ async function withSqliteLock(key, work) {
 function rolePermissions(role) {
   const map = {
     admin: ['*'],
-    manager: ['dashboard.read', 'products.*', 'inventory.*', 'trade.*', 'parties.*', 'payments.*', 'approvals.*', 'ai.*', 'barcode.*'],
+    manager: ['dashboard.read', 'products.*', 'inventory.*', 'trade.*', 'parties.*', 'payments.*', 'approvals.*', 'ai.*', 'barcode.*', 'finance.*', 'reports.read'],
     cashier: [
       'dashboard.read', 'products.read', 'inventory.read', 'trade.sales.*',
       'parties.customers.*', 'payments.create', 'ai.read',

@@ -76,6 +76,163 @@
   --transition: 0.15s ease;
 }
 
+/* Milestone 1 operational layout. Uses only the existing design tokens. */
+.workspace-search-input {
+  min-width: 210px;
+}
+
+#milestone1-workspace .panel-title-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+#milestone1-workspace .panel-title-row .panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.workspace-search-input,
+#m1StatusFilter,
+#m1SettingsNamespace {
+  min-height: 40px;
+  padding: 9px 12px;
+  color: var(--ink);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font);
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.workspace-search-input:focus,
+#m1StatusFilter:focus,
+#m1SettingsNamespace:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--primary-color-light);
+}
+
+.workspace-inline-state {
+  padding: 24px;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+.workspace-inline-state:empty,
+.workspace-inline-state[hidden] {
+  display: none;
+}
+
+.workspace-detail-drawer {
+  position: fixed;
+  z-index: 1200;
+  top: 0;
+  right: 0;
+  width: min(620px, 100vw);
+  height: 100vh;
+  overflow: auto;
+  padding: 20px;
+  background: var(--bg-card);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-xl);
+  transform: translateX(105%);
+  transition: transform var(--transition);
+}
+
+.workspace-detail-drawer.open {
+  transform: translateX(0);
+}
+
+.workspace-detail-body {
+  display: grid;
+  gap: 16px;
+  padding-top: 16px;
+}
+
+.workspace-detail-section {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.workspace-detail-section h4 {
+  margin: 0 0 12px;
+}
+
+.workspace-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace-detail-grid span,
+.workspace-timeline small {
+  color: var(--ink-muted);
+}
+
+.workspace-timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.workspace-timeline > div {
+  padding-left: 12px;
+  border-left: 2px solid var(--primary-color);
+}
+
+.workspace-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.workspace-form-grid .form-group.full {
+  grid-column: 1 / -1;
+}
+
+.workspace-line-editor {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(90px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.workspace-settings-form {
+  display: grid;
+  gap: 16px;
+}
+
+.workspace-settings-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 760px) {
+  #milestone1-workspace .panel-title-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workspace-detail-grid,
+  .workspace-form-grid,
+  .workspace-settings-fields,
+  .workspace-line-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-search-input {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
 /* ─── Color Theme Rules ─── */
 html[data-theme-color="blue"] {
   --primary-color: #2563eb;

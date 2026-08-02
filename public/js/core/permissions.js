@@ -22,4 +22,11 @@ export function applyPermissionVisibility(root = document, grants = readStoredPe
     element.hidden = !allowed;
     element.setAttribute('aria-hidden', String(!allowed));
   });
+  root.querySelectorAll('.nav-dropdown-wrapper').forEach(wrapper => {
+    const entries = [...wrapper.querySelectorAll('.nav-dropdown-item')];
+    if (!entries.length) return;
+    const visible = entries.some(entry => !entry.hidden);
+    wrapper.hidden = !visible;
+    wrapper.setAttribute('aria-hidden', String(!visible));
+  });
 }

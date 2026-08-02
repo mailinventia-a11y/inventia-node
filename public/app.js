@@ -1292,7 +1292,7 @@ function renderEnterpriseSuppliers() {
       <td>${escapeHtml(supplier.profile_gstin || supplier.gstin || '—')}</td>
       <td>${Number(supplier.payment_terms_days || supplier.payment_terms || 0)} days</td>
       <td>${Number(supplier.lead_time_days || 0)} days</td>
-      <td>${supplier.rating == null ? '—' : `${Number(supplier.rating).toFixed(1)} / 5`}</td>
+      <td>${supplier.rating == null ? '—' : `${Number(supplier.rating).toFixed(1)} / 5`}<br><button class="action-btn secondary compact" onclick="InventiaMilestone1.openPartyDetail('supplier', ${supplier.id}, InventiaCore.api)">View</button></td>
     </tr>`).join('');
 }
 
@@ -2808,6 +2808,9 @@ function loadInventoryTable() {
         <span class="stock-pill ${(p.stock || 0) < p.min_stock_alert ? 'low' : 'ok'}">${p.stock || 0} ${p.uom}s</span>
       </td>
       <td>
+        <button class="action-btn-sm" onclick="InventiaMilestone1.openProductDetail(${p.id}, InventiaCore.api)" title="Open product details">
+          <i class="fa-solid fa-eye"></i> View
+        </button>
         <button class="action-btn-sm" onclick="openBarcodeModal(${p.id})" title="View and print barcode">
           <i class="fa-solid fa-barcode"></i> ${p.barcode ? 'Print' : 'Assign'}
         </button>
@@ -6143,11 +6146,12 @@ function loadCustomerLedger() {
 
     const actionCell = userRole === 'admin' ? `
       <td>
+        <button class="action-btn-sm" onclick="InventiaMilestone1.openPartyDetail('customer', ${c.id}, InventiaCore.api)"><i class="fa-solid fa-eye"></i> View</button>
         <button class="action-btn-sm" style="background-color: var(--red-600); color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; transition: background-color var(--transition);" onmouseover="this.style.backgroundColor='#b91c1c'" onmouseout="this.style.backgroundColor='var(--red-600)'" onclick="deleteCustomer(${c.id})">
           <i class="fa-solid fa-trash"></i> Delete
         </button>
       </td>
-    ` : `<td>-</td>`;
+    ` : `<td><button class="action-btn-sm" onclick="InventiaMilestone1.openPartyDetail('customer', ${c.id}, InventiaCore.api)"><i class="fa-solid fa-eye"></i> View</button></td>`;
 
     tr.innerHTML = `
       <td>
