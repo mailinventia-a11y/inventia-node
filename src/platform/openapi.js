@@ -2,8 +2,8 @@ export const phase5OpenApi = {
   openapi: '3.1.0',
   info: {
     title: 'Inventia Enterprise Core Trade API',
-    version: '9.0.0',
-    description: 'Tenant-isolated trade, online catalogue and orders, encrypted integrations, webhooks, recurring invoices, GST compliance, payments, accounting, projects, inventory, barcodes, settings, and feature-flag APIs.'
+    version: '10.0.0',
+    description: 'Tenant-isolated trade, unified reporting, grounded AI, online catalogue and orders, encrypted integrations, webhooks, recurring invoices, GST compliance, payments, accounting, projects, inventory, barcodes, settings, and feature-flag APIs.'
   },
   servers: [{ url: '/api/v1' }],
   components: {
@@ -237,6 +237,9 @@ export const phase5OpenApi = {
       post: { summary: 'Create an encrypted signing secret shown once', responses: { 201: { description: 'Webhook subscription created' } } }
     },
     '/webhook-deliveries': { get: { summary: 'List sanitized webhook delivery history', responses: { 200: { description: 'Webhook deliveries' } } } },
+    '/reports': { get: { summary: 'List unified operational, financial, compliance, and audit reports', responses: { 200: { description: 'Report definitions' } } } },
+    '/reports/{reportKey}': { get: { summary: 'Run a tenant-scoped report with optional date filters', responses: { 200: { description: 'Report result' }, 404: { description: 'Report not found' } } } },
+    '/reports/{reportKey}/export': { get: { summary: 'Export an authenticated report as CSV', responses: { 200: { description: 'CSV report export' } } } },
     '/finance/accounts': {
       get: { summary: 'List tenant chart of accounts with minor-unit balances', responses: { 200: { description: 'Accounts' } } },
       post: { summary: 'Create a chart-of-accounts record', responses: { 201: { description: 'Account created' } } }

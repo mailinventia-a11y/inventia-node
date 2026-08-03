@@ -10,7 +10,8 @@ import { createTradeDocument, transferStock } from './enterpriseTradeService.js'
 import { httpError, parseJson, writeTenantAudit } from '../platform/phase5Http.js';
 
 export async function collectTenantBusinessContext(db) {
-  const [products, stock, sales, saleItems, customers, suppliers, warehouses, payments, accounts, entries] = await Promise.all([
+  const [products, stock, sales, saleItems, customers, suppliers, warehouses, payments, accounts, entries,
+    projects, compliance, paymentLinks, reminders, onlineOrders] = await Promise.all([
     safeAll(db, 'SELECT * FROM products'),
     safeAll(db, 'SELECT * FROM warehouse_stock'),
     safeAll(db, 'SELECT * FROM sales'),
@@ -20,7 +21,12 @@ export async function collectTenantBusinessContext(db) {
     safeAll(db, 'SELECT * FROM warehouses'),
     safeAll(db, 'SELECT * FROM payments'),
     safeAll(db, 'SELECT * FROM accounts'),
-    safeAll(db, 'SELECT * FROM journal_entries')
+    safeAll(db, 'SELECT * FROM journal_entries'),
+    safeAll(db, 'SELECT * FROM projects'),
+    safeAll(db, 'SELECT * FROM gst_return_periods'),
+    safeAll(db, 'SELECT * FROM payment_links'),
+    safeAll(db, 'SELECT * FROM reminders'),
+    safeAll(db, 'SELECT * FROM online_orders')
   ]);
   const stockByProduct = new Map();
   for (const row of stock) stockByProduct.set(Number(row.product_id), (stockByProduct.get(Number(row.product_id)) || 0) + Number(row.quantity || 0));
@@ -28,7 +34,8 @@ export async function collectTenantBusinessContext(db) {
   return {
     products: enrichedProducts,
     productMap: new Map(enrichedProducts.map(product => [Number(product.id), product])),
-    stock, sales, saleItems, customers, suppliers, warehouses, payments, accounts, entries
+    stock, sales, saleItems, customers, suppliers, warehouses, payments, accounts, entries,
+    projects, compliance, paymentLinks, reminders, onlineOrders
   };
 }
 
@@ -54,7 +61,9 @@ export async function tenantAiChat(db, input, req) {
   const context = await collectTenantBusinessContext(db);
   const knowledgeRows = await db.all(`SELECT * FROM ai_knowledge_documents WHERE status = 'active' ORDER BY updated_at DESC`);
   const knowledge = rankKnowledge(knowledgeRows, input.message);
-  const response = await generateCopilotResponse({ message: input.message, context, user: req.user, knowledge });
+  const aiSettings = await db.one(`SELECT setting_value FROM organization_settings WHERE setting_key = 'settings.ai'`);
+  const customInstructions = parseJson(aiSettings?.setting_value, {}).chat_instructions || '';
+  const response = await generateCopilotResponse({ message: input.message, context, user: req.user, knowledge, customInstructions });
   const assistantInsert = await insertWithId(db,
     `INSERT INTO ai_messages (conversation_id, role, content, metadata, created_at)
      VALUES (?, 'assistant', ?, ?, ?)`,

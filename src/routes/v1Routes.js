@@ -213,6 +213,7 @@ import {
   updateStoreSettings,
   updateWebhookSubscription
 } from '../services/storeIntegrationService.js';
+import { listReportDefinitions, reportToCsv, runReport } from '../services/reportingService.js';
 
 const router = express.Router();
 const upload = multer({
@@ -1662,6 +1663,18 @@ router.get('/dashboard/summary', requirePermission('dashboard.read'), asyncRoute
 }));
 router.get('/dashboard/activity', requirePermission('dashboard.read'), asyncRoute(async (req, res) => {
   res.json({ activity: await dashboardActivity(req.tenantDb, req.query.limit) });
+}));
+router.get('/reports', requirePermission('reports.read'), asyncRoute(async (_req, res) => {
+  res.json({ reports: listReportDefinitions() });
+}));
+router.get('/reports/:reportKey', requirePermission('reports.read'), asyncRoute(async (req, res) => {
+  res.json(await runReport(req.tenantDb, req.params.reportKey, req.query));
+}));
+router.get('/reports/:reportKey/export', requirePermission('reports.read'), asyncRoute(async (req, res) => {
+  const result = await runReport(req.tenantDb, req.params.reportKey, { ...req.query, limit: req.query.limit || 5000 });
+  res.type('text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="inventia-${req.params.reportKey}-${new Date().toISOString().slice(0, 10)}.csv"`);
+  res.send(reportToCsv(result));
 }));
 router.get('/sales', requirePermission('trade.sales.read'), asyncRoute(async (req, res) => {
   const sales = await req.tenantDb.all(

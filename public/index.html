@@ -149,7 +149,7 @@
           <button class="nav-dropdown-item" data-tab="milestone4-workspace" data-module="compliance" data-view="tds-tcs" data-permission="compliance.read" data-feature="compliance_v2"><i class="fa-solid fa-percent"></i> TDS/TCS</button>
         </div>
       </div>
-      <button class="nav-btn" data-tab="reports" data-module="insights" data-view="analytics" data-permission="reports.read"><i class="fa-solid fa-chart-simple"></i> Analytics</button>
+      <button class="nav-btn" data-tab="milestone6-workspace" data-module="insights" data-view="analytics" data-permission="reports.read"><i class="fa-solid fa-chart-simple"></i> Reports</button>
       <button class="nav-btn" data-tab="automation" data-module="ai" data-view="copilot" data-permission="ai.read"><i class="fa-solid fa-wand-magic-sparkles"></i> Inventia AI <span class="nav-badge new">AI</span></button>
       <button class="nav-btn" data-tab="milestone5-workspace" data-module="store" data-view="overview" data-permission="store.read" data-feature="online_store_v2"><i class="fa-solid fa-store"></i> Online Store</button>
       <button class="nav-btn" data-tab="milestone5-workspace" data-module="integrations" data-view="overview" data-permission="integrations.read" data-feature="integrations_v2"><i class="fa-solid fa-plug"></i> Integrations</button>
@@ -2175,6 +2175,24 @@
           </form>
           <div id="aiKnowledgeList" class="ai-knowledge-list"></div>
         </div>
+      </div>
+    </section>
+
+    <!-- MILESTONE 6: unified report centre -->
+    <section id="milestone6-workspace" class="tab-panel workspace-page">
+      <div class="workspace-page-hero">
+        <div class="workspace-page-icon blue"><i class="fa-solid fa-chart-simple"></i></div>
+        <div><p class="eyebrow">Unified reporting</p><h2>Report Centre</h2><p>Run tenant-scoped operational, financial, compliance, and audit reports from one workspace.</p></div>
+        <div class="panel-actions"><button class="action-btn secondary compact" id="m6Export" type="button"><i class="fa-solid fa-download"></i> Export CSV</button></div>
+      </div>
+      <div class="kpi-grid" id="m6ReportKpis" hidden></div>
+      <div class="grid-panel">
+        <div class="panel-title-row">
+          <div><h3 id="m6ReportTitle">Reports</h3><p id="m6ReportDescription">Choose a report to inspect authoritative tenant data.</p></div>
+          <div class="panel-actions"><select id="m6ReportSelect" aria-label="Select report"></select><input id="m6ReportFrom" type="date" aria-label="Report from date"><input id="m6ReportTo" type="date" aria-label="Report to date"><button class="action-btn primary compact" id="m6RunReport" type="button">Run report</button></div>
+        </div>
+        <div id="m6ReportState" class="workspace-inline-state" role="status">Loading…</div>
+        <div class="table-container" id="m6ReportTable"></div>
       </div>
     </section>
 
