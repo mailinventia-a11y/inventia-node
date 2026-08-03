@@ -133,8 +133,22 @@
         </div>
       </div>
       <button class="nav-btn" data-tab="milestone3-workspace" data-module="projects" data-view="overview" data-permission="projects.read" data-feature="projects_v2"><i class="fa-solid fa-diagram-project"></i> Projects</button>
+      <button class="nav-btn" data-tab="milestone4-workspace" data-module="subscriptions" data-view="overview" data-permission="subscriptions.read" data-feature="subscriptions_v2"><i class="fa-solid fa-arrows-rotate"></i> Subscriptions</button>
       <p class="nav-section-label nav-section-secondary">Tools</p>
       <button class="nav-btn" data-tab="milestone3-workspace" data-module="reminders" data-view="overview" data-permission="reminders.read" data-feature="reminders_v2"><i class="fa-solid fa-bell"></i> Reminders</button>
+      <div class="nav-dropdown-wrapper" id="dropdownCompliance" data-feature="compliance_v2">
+        <button class="nav-btn nav-dropdown-trigger"><i class="fa-solid fa-file-shield"></i> Compliance <i class="fa-solid fa-chevron-down caret"></i></button>
+        <div class="nav-dropdown-content">
+          <button class="nav-dropdown-item" data-tab="milestone4-workspace" data-module="compliance" data-view="e-invoices" data-permission="compliance.read" data-feature="compliance_v2"><i class="fa-solid fa-file-circle-check"></i> E-Invoices</button>
+          <button class="nav-dropdown-item" data-tab="milestone4-workspace" data-module="compliance" data-view="e-way-bills" data-permission="compliance.read" data-feature="compliance_v2"><i class="fa-solid fa-truck-fast"></i> E-Way Bills</button>
+          <button class="nav-dropdown-item" data-tab="milestone4-workspace" data-module="compliance" data-view="gstr-1" data-permission="compliance.read" data-feature="compliance_v2"><i class="fa-solid fa-table-list"></i> GSTR-1</button>
+          <button class="nav-dropdown-item" data-tab="milestone4-workspace" data-module="compliance" data-view="gstr-2b" data-permission="compliance.read" data-feature="compliance_v2"><i class="fa-solid fa-code-compare"></i> GSTR-2B</button>
+          <button class="nav-dropdown-item" data-tab="milestone4-workspace" data-module="compliance" data-view="gstr-3b" data-permission="compliance.read" data-feature="compliance_v2"><i class="fa-solid fa-calculator"></i> GSTR-3B</button>
+          <button class="nav-dropdown-item" data-tab="milestone4-workspace" data-module="compliance" data-view="gstr-7" data-permission="compliance.read" data-feature="compliance_v2"><i class="fa-solid fa-building-columns"></i> GSTR-7</button>
+          <button class="nav-dropdown-item" data-tab="milestone4-workspace" data-module="compliance" data-view="ims" data-permission="compliance.read" data-feature="compliance_v2"><i class="fa-solid fa-list-check"></i> IMS</button>
+          <button class="nav-dropdown-item" data-tab="milestone4-workspace" data-module="compliance" data-view="tds-tcs" data-permission="compliance.read" data-feature="compliance_v2"><i class="fa-solid fa-percent"></i> TDS/TCS</button>
+        </div>
+      </div>
       <button class="nav-btn" data-tab="reports" data-module="insights" data-view="analytics" data-permission="reports.read"><i class="fa-solid fa-chart-simple"></i> Analytics</button>
       <button class="nav-btn" data-tab="automation" data-module="ai" data-view="copilot" data-permission="ai.read"><i class="fa-solid fa-wand-magic-sparkles"></i> Inventia AI <span class="nav-badge new">AI</span></button>
       <button class="nav-btn" data-tab="settings-tab" data-module="settings" data-view="organization" data-permission="settings.manage"><i class="fa-solid fa-gear"></i> Settings</button>
@@ -1982,6 +1996,25 @@
         <div id="m3WorkspaceForm" class="workspace-detail-section" hidden></div>
         <div id="m3WorkspaceState" class="workspace-inline-state" role="status">Loading…</div>
         <div class="table-container" id="m3WorkspaceTable"></div>
+      </div>
+    </section>
+
+    <!-- MILESTONE 4: subscriptions and compliance -->
+    <section id="milestone4-workspace" class="tab-panel workspace-page">
+      <div class="workspace-page-hero">
+        <div class="workspace-page-icon blue" id="m4WorkspaceIcon"><i class="fa-solid fa-file-shield"></i></div>
+        <div><p class="eyebrow">Recurring trade &amp; compliance</p><h2 id="m4WorkspaceTitle">Workspace</h2><p id="m4WorkspaceDescription">Controlled recurring invoices and GST operations.</p></div>
+        <div class="panel-actions" id="m4WorkspaceActions"></div>
+      </div>
+      <div class="kpi-grid" id="m4WorkspaceKpis" hidden></div>
+      <div class="grid-panel">
+        <div class="panel-title-row">
+          <div><h3 id="m4PanelTitle">Records</h3><p>Tenant-scoped, audited, and approval gated.</p></div>
+          <button class="action-btn secondary compact" id="m4Refresh" type="button"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+        <div id="m4WorkspaceForm" class="workspace-detail-section" hidden></div>
+        <div id="m4WorkspaceState" class="workspace-inline-state" role="status">Loading…</div>
+        <div class="table-container" id="m4WorkspaceTable"></div>
       </div>
     </section>
 

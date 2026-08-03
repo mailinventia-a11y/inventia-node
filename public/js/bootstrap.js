@@ -6,6 +6,7 @@ import { WorkspaceRouter } from './core/router.js';
 import { createStateStore } from './core/state.js';
 import { installMilestone1 } from './milestone1.js';
 import { installMilestone3 } from './milestone3.js';
+import { installMilestone4 } from './milestone4.js';
 
 const store = createStateStore({
   ready: false,
@@ -20,6 +21,7 @@ const router = new WorkspaceRouter({ store, permissions: () => readStoredPermiss
 const realtime = new OrganizationRealtimeClient();
 installMilestone1({ router, api, store });
 installMilestone3({ router, api, store });
+installMilestone4({ router, api, store });
 
 async function initializeAuthenticated() {
   const authenticated = Boolean(localStorage.getItem('phase5AccessToken'));
@@ -29,6 +31,10 @@ async function initializeAuthenticated() {
     return store.getState();
   }
 
+  // A session-change can begin after the unauthenticated bootstrap has already
+  // marked the store ready. Reset readiness so route consumers cannot observe
+  // a stale authenticated=false state while flags and settings are loading.
+  store.patch({ ready: false, authenticated: true, error: null });
   try {
     const [flagsResult, settingsResult] = await Promise.all([
       api.get('/feature-flags'),

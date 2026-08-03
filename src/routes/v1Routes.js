@@ -164,6 +164,29 @@ import {
   unlinkProjectDocument,
   updateProject
 } from '../services/businessOperationsService.js';
+import {
+  cancelComplianceDocument,
+  createSubscription,
+  decideGstReturnApproval,
+  fileGstReturn,
+  generateComplianceDocument,
+  generateSubscriptionRun,
+  getComplianceDocument,
+  getGstReturn,
+  getSubscription,
+  importGstr2bRows,
+  listComplianceDocuments,
+  listGstReturns,
+  listSubscriptions,
+  prepareComplianceDocument,
+  prepareGstReturn,
+  processDueSubscriptions,
+  requestGstReturnApproval,
+  tdsTcsReport,
+  transitionSubscription,
+  updateImsAction,
+  updateSubscription
+} from '../services/subscriptionComplianceService.js';
 
 const router = express.Router();
 const upload = multer({
@@ -474,6 +497,44 @@ const projectDocumentSchema = z.object({
   entity_type: z.enum(['invoice', 'trade_document', 'expense']),
   entity_id: z.union([z.string().trim().min(1).max(100), z.coerce.number().int().positive()]),
   relationship_type: z.string().trim().min(1).max(100).default('related')
+});
+const subscriptionItemSchema = z.object({
+  product_id: z.coerce.number().int().positive(),
+  variant_id: z.coerce.number().int().positive().optional(),
+  quantity: z.coerce.number().positive(),
+  unit_price: z.coerce.number().nonnegative().optional()
+});
+const subscriptionSchema = z.object({
+  name: z.string().trim().min(1).max(300),
+  customer_id: z.coerce.number().int().positive(), warehouse_id: z.coerce.number().int().positive(),
+  frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY']),
+  interval_count: z.coerce.number().int().min(1).max(120).default(1),
+  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  due_days: z.coerce.number().int().min(0).max(3650).default(0),
+  price_policy: z.enum(['SNAPSHOT', 'CURRENT_APPROVED']).default('SNAPSHOT'),
+  items: z.array(subscriptionItemSchema).min(1).max(200),
+  invoice_details: z.record(z.string(), z.unknown()).optional(),
+  delivery_channels: z.array(z.enum(['IN_APP', 'EMAIL'])).min(1).max(2).default(['IN_APP']),
+  notes: z.string().trim().max(5000).optional()
+});
+const subscriptionUpdateSchema = subscriptionSchema.partial();
+const complianceDocumentSchema = z.object({
+  invoice_id: z.coerce.number().int().positive().optional(),
+  trade_document_id: z.coerce.number().int().positive().optional(),
+  transport: z.object({
+    transporter_id: z.string().trim().max(100).optional(), transporter_name: z.string().trim().max(300).optional(),
+    vehicle_number: z.string().trim().max(30).optional(), distance_km: z.coerce.number().min(0).max(4000).optional(),
+    transport_mode: z.string().trim().max(50).optional()
+  }).optional()
+}).refine(value => value.invoice_id || value.trade_document_id, { message: 'Invoice or trade document is required.' });
+const gstr2bImportSchema = z.object({
+  period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  rows: z.array(z.object({
+    gstin: z.string().trim().max(30).optional(), document_number: z.string().trim().min(1).max(100),
+    document_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    taxable: z.coerce.number().nonnegative(), tax: z.coerce.number().nonnegative()
+  })).max(10000)
 });
 
 router.post('/auth/login', validate(loginSchema), asyncRoute(async (req, res) => {
@@ -1357,6 +1418,87 @@ router.post('/projects/:id/documents', requirePermission('projects.manage'), val
 router.delete('/projects/:id/documents/:documentId', requirePermission('projects.manage'), mutation(async req => ({
   body: await unlinkProjectDocument(req.tenantDb, req.params.id, req.params.documentId, req)
 })));
+
+router.get('/subscriptions', requirePermission('subscriptions.read'), asyncRoute(async (req, res) => {
+  res.json({ subscriptions: await listSubscriptions(req.tenantDb, req.query) });
+}));
+router.post('/subscriptions', requirePermission('subscriptions.manage'), validate(subscriptionSchema), mutation(async req => ({
+  status: 201, body: await createSubscription(req.tenantDb, req.body, req)
+})));
+router.post('/subscriptions/process-due', requirePermission('subscriptions.manage'), validate(z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional()
+})), mutation(async req => ({
+  body: { results: await processDueSubscriptions(req.tenantDb, req.user.organization_id, req.body.limit) }
+})));
+router.get('/subscriptions/:id', requirePermission('subscriptions.read'), asyncRoute(async (req, res) => {
+  res.json(await getSubscription(req.tenantDb, req.params.id));
+}));
+router.put('/subscriptions/:id', requirePermission('subscriptions.manage'), validate(subscriptionUpdateSchema), mutation(async req => ({
+  body: await updateSubscription(req.tenantDb, req.params.id, req.body, req)
+})));
+for (const action of ['activate', 'pause', 'resume', 'cancel']) {
+  router.post(`/subscriptions/:id/${action}`, requirePermission('subscriptions.manage'), validate(z.object({})), mutation(async req => ({
+    body: await transitionSubscription(req.tenantDb, req.params.id, action === 'resume' ? 'ACTIVE' : action, req)
+  })));
+}
+router.get('/subscriptions/:id/runs', requirePermission('subscriptions.read'), asyncRoute(async (req, res) => {
+  const subscription = await getSubscription(req.tenantDb, req.params.id);
+  res.json({ runs: subscription.runs });
+}));
+router.post('/subscription-runs/:id/retry', requirePermission('subscriptions.manage'), validate(z.object({})), mutation(async req => ({
+  body: await generateSubscriptionRun(req.tenantDb, req.user.organization_id, req.params.id)
+})));
+
+router.get('/compliance/:documentType(e-invoices|e-way-bills)', requirePermission('compliance.read'), asyncRoute(async (req, res) => {
+  res.json({ documents: await listComplianceDocuments(req.tenantDb, req.params.documentType, req.query) });
+}));
+router.post('/compliance/:documentType(e-invoices|e-way-bills)', requirePermission('compliance.prepare'), validate(complianceDocumentSchema), mutation(async req => ({
+  status: 201, body: await prepareComplianceDocument(req.tenantDb, req.params.documentType, req.body, req)
+})));
+router.get('/compliance/documents/:id', requirePermission('compliance.read'), asyncRoute(async (req, res) => {
+  res.json(await getComplianceDocument(req.tenantDb, req.params.id));
+}));
+router.post('/compliance/documents/:id/generate', requirePermission('compliance.prepare'), validate(z.object({})), mutation(async req => ({
+  body: await generateComplianceDocument(req.tenantDb, req.params.id, req)
+})));
+router.post('/compliance/documents/:id/cancel', requirePermission('compliance.file'), validate(z.object({
+  reason: z.string().trim().min(1).max(500)
+})), mutation(async req => ({
+  body: await cancelComplianceDocument(req.tenantDb, req.params.id, req.body.reason, req)
+})));
+router.get('/compliance/returns/:returnType(gstr-1|gstr-2b|gstr-3b|gstr-7|ims)', requirePermission('compliance.read'), asyncRoute(async (req, res) => {
+  res.json({ returns: await listGstReturns(req.tenantDb, req.params.returnType, req.query) });
+}));
+router.post('/compliance/returns/:returnType(gstr-1|gstr-3b|gstr-7|ims)/prepare', requirePermission('compliance.prepare'), validate(z.object({
+  period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+})), mutation(async req => ({
+  body: await prepareGstReturn(req.tenantDb, req.params.returnType, req.body.period, req)
+})));
+router.post('/compliance/returns/gstr-2b/import', requirePermission('compliance.prepare'), validate(gstr2bImportSchema), mutation(async req => ({
+  body: await importGstr2bRows(req.tenantDb, req.body.period, req.body.rows, req)
+})));
+router.get('/compliance/return-periods/:id', requirePermission('compliance.read'), asyncRoute(async (req, res) => {
+  res.json(await getGstReturn(req.tenantDb, req.params.id));
+}));
+router.post('/compliance/return-periods/:id/request-approval', requirePermission('compliance.prepare'), validate(z.object({})), mutation(async req => ({
+  body: await requestGstReturnApproval(req.tenantDb, req.params.id, req)
+})));
+for (const decision of ['approve', 'reject']) {
+  router.post(`/compliance/return-periods/:id/${decision}`, requirePermission('compliance.file'), validate(z.object({})), mutation(async req => ({
+    body: await decideGstReturnApproval(req.tenantDb, req.params.id, decision, req)
+  })));
+}
+router.post('/compliance/return-periods/:id/file', requirePermission('compliance.file'), validate(z.object({})), mutation(async req => ({
+  body: await fileGstReturn(req.tenantDb, req.params.id, req)
+})));
+router.post('/compliance/return-periods/:id/rows/:rowId/ims', requirePermission('compliance.prepare'), validate(z.object({
+  action: z.enum(['ACCEPT', 'REJECT', 'PENDING'])
+})), mutation(async req => ({
+  body: await updateImsAction(req.tenantDb, req.params.id, req.params.rowId, req.body.action, req)
+})));
+router.get('/compliance/tds-tcs', requirePermission('compliance.read'), asyncRoute(async (req, res) => {
+  res.json(await tdsTcsReport(req.tenantDb, req.query));
+}));
 
 router.get('/dashboard/summary', requirePermission('dashboard.read'), asyncRoute(async (req, res) => {
   res.json(await dashboardSummary(req.tenantDb, req.user.organization_id, req.query.refresh === 'true'));

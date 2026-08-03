@@ -1087,6 +1087,15 @@ export async function dashboardActivity(db, limit = 50) {
 export async function checkoutPos(db, input, req) {
   const actorId = req.user.tenant_user_id || req.user.id;
   const result = await db.transaction(async tx => {
+    let subscriptionRun = null;
+    if (input.subscription_run_id) {
+      const lock = tx.dialect === 'postgres' ? ' FOR UPDATE' : '';
+      subscriptionRun = await tx.one(`SELECT * FROM subscription_runs WHERE id = ?${lock}`, [input.subscription_run_id]);
+      if (!subscriptionRun) throw httpError(404, 'subscription_run_not_found', 'Subscription run was not found.');
+      if (subscriptionRun.invoice_id || subscriptionRun.status === 'COMPLETED') {
+        throw httpError(409, 'subscription_run_already_completed', 'This subscription occurrence already generated an invoice.');
+      }
+    }
     const warehouse = await tx.one('SELECT * FROM warehouses WHERE id = ?', [input.warehouse_id]);
     if (!warehouse) throw httpError(404, 'warehouse_not_found', 'Warehouse was not found.');
     const customer = input.customer_id
@@ -1193,7 +1202,7 @@ export async function checkoutPos(db, input, req) {
         fromMinor(calculated.subtotal_minor), fromMinor(calculated.discount_total_minor),
         fromMinor(calculated.cgst_total_minor + calculated.sgst_total_minor + calculated.igst_total_minor),
         fromMinor(calculated.grand_total_minor), input.notes || null,
-        JSON.stringify({ sale_id: saleId, channel: 'pos', invoice_engine: 'phase5-invoice-payments-002' }),
+        JSON.stringify({ sale_id: saleId, channel: subscriptionRun ? 'subscription' : 'pos', subscription_run_id: subscriptionRun?.id || null, invoice_engine: 'phase5-invoice-payments-002' }),
         actorId, actorId, timestamp, timestamp, timestamp, timestamp
       ]
     );
@@ -1303,6 +1312,13 @@ export async function checkoutPos(db, input, req) {
     for (const allocation of payments.allocations) await postPaymentAccountingTx(tx, allocation, actorId);
     await recordInvoiceLedgerTx(tx, invoice, payments, actorId);
     const paymentSummary = await calculateInvoicePaymentState(tx, invoiceId);
+    if (subscriptionRun) {
+      await tx.run(
+        `UPDATE subscription_runs SET status = 'COMPLETED', invoice_id = ?, sale_id = ?,
+          completed_at = ?, error_code = NULL, error_message = NULL, updated_at = ? WHERE id = ?`,
+        [invoiceId, saleId, timestamp, timestamp, subscriptionRun.id]
+      );
+    }
     await timeline(tx, 'invoice', documentId, 'pos.completed', actorId, `${invoiceNo} completed through POS.`);
     return {
       sale_id: saleId,

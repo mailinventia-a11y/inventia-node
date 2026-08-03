@@ -2,8 +2,8 @@ export const phase5OpenApi = {
   openapi: '3.1.0',
   info: {
     title: 'Inventia Enterprise Core Trade API',
-    version: '7.0.0',
-    description: 'Tenant-isolated trade, GST invoices, payments, accounting, reminders, projects, inventory, barcodes, settings, and feature-flag APIs.'
+    version: '8.0.0',
+    description: 'Tenant-isolated trade, recurring invoices, GST compliance, payments, accounting, projects, inventory, barcodes, settings, and feature-flag APIs.'
   },
   servers: [{ url: '/api/v1' }],
   components: {
@@ -178,6 +178,37 @@ export const phase5OpenApi = {
     '/projects/{id}/profitability': { get: { summary: 'Calculate project revenue, cost, profit, margin, and budget comparison', responses: { 200: { description: 'Project profitability' } } } },
     '/projects/{id}/documents': { post: { summary: 'Link a validated invoice, expense, or trade document to a project', responses: { 201: { description: 'Document linked' } } } },
     '/projects/{id}/documents/{documentId}': { delete: { summary: 'Remove a project document and its generated profitability entry', responses: { 200: { description: 'Document unlinked' } } } },
+    '/subscriptions': {
+      get: { summary: 'List recurring invoice definitions and run counts', responses: { 200: { description: 'Subscriptions' } } },
+      post: { summary: 'Create a draft recurring invoice definition with price snapshots', responses: { 201: { description: 'Subscription created' } } }
+    },
+    '/subscriptions/{id}': {
+      get: { summary: 'Get a subscription and immutable occurrence runs', responses: { 200: { description: 'Subscription' } } },
+      put: { summary: 'Update a draft subscription', responses: { 200: { description: 'Subscription updated' } } }
+    },
+    '/subscriptions/{id}/activate': { post: { summary: 'Activate a recurring invoice schedule', responses: { 200: { description: 'Activated' } } } },
+    '/subscriptions/{id}/pause': { post: { summary: 'Pause an active schedule', responses: { 200: { description: 'Paused' } } } },
+    '/subscriptions/{id}/resume': { post: { summary: 'Resume a paused schedule', responses: { 200: { description: 'Resumed' } } } },
+    '/subscriptions/{id}/cancel': { post: { summary: 'Cancel a subscription permanently', responses: { 200: { description: 'Cancelled' } } } },
+    '/subscriptions/{id}/runs': { get: { summary: 'List retry-safe subscription occurrences', responses: { 200: { description: 'Runs' } } } },
+    '/subscriptions/process-due': { post: { summary: 'Process due subscription occurrences for the active tenant', responses: { 200: { description: 'Run results' } } } },
+    '/compliance/e-invoices': {
+      get: { summary: 'List e-invoice preparation and provider states', responses: { 200: { description: 'E-invoices' } } },
+      post: { summary: 'Prepare an immutable e-invoice provider payload', responses: { 201: { description: 'Prepared' } } }
+    },
+    '/compliance/e-way-bills': {
+      get: { summary: 'List e-way bill preparation and provider states', responses: { 200: { description: 'E-way bills' } } },
+      post: { summary: 'Prepare an invoice or challan for e-way bill generation', responses: { 201: { description: 'Prepared' } } }
+    },
+    '/compliance/documents/{id}/generate': { post: { summary: 'Generate through a configured GST provider; missing credentials return 503', responses: { 200: { description: 'Generated with provider evidence' }, 503: { description: 'Integration not configured' } } } },
+    '/compliance/documents/{id}/cancel': { post: { summary: 'Cancel through the provider within applicable windows', responses: { 200: { description: 'Provider-confirmed cancellation' } } } },
+    '/compliance/returns/{returnType}': { get: { summary: 'List GST return periods by type', responses: { 200: { description: 'Return periods' } } } },
+    '/compliance/returns/{returnType}/prepare': { post: { summary: 'Prepare return figures from immutable tenant books', responses: { 200: { description: 'Prepared return' } } } },
+    '/compliance/returns/gstr-2b/import': { post: { summary: 'Import and reconcile GSTR-2B portal rows', responses: { 200: { description: 'Reconciled import' } } } },
+    '/compliance/return-periods/{id}/request-approval': { post: { summary: 'Lock a prepared return for authorized approval', responses: { 200: { description: 'Approval requested' } } } },
+    '/compliance/return-periods/{id}/approve': { post: { summary: 'Authorize a return for filing', responses: { 200: { description: 'Approved' } } } },
+    '/compliance/return-periods/{id}/file': { post: { summary: 'File an approved return through a configured provider', responses: { 200: { description: 'Provider-confirmed filing' }, 503: { description: 'Integration not configured' } } } },
+    '/compliance/tds-tcs': { get: { summary: 'TDS/TCS exposure report from posted tenant records', responses: { 200: { description: 'TDS/TCS report' } } } },
     '/finance/accounts': {
       get: { summary: 'List tenant chart of accounts with minor-unit balances', responses: { 200: { description: 'Accounts' } } },
       post: { summary: 'Create a chart-of-accounts record', responses: { 201: { description: 'Account created' } } }

@@ -176,6 +176,17 @@ export async function migrateTenantDatabase(database) {
         ['phase7-payment-projects-004', now()]
       );
     }
+    const complianceEngineApplied = await tx.one(
+      'SELECT version FROM migration_versions WHERE version = ?',
+      ['phase8-subscriptions-compliance-005']
+    );
+    if (!complianceEngineApplied) {
+      await seedSubscriptionsComplianceDefaults(tx);
+      await tx.run(
+        'INSERT INTO migration_versions (version, applied_at) VALUES (?, ?)',
+        ['phase8-subscriptions-compliance-005', now()]
+      );
+    }
   });
 }
 
@@ -379,6 +390,17 @@ async function migrateControlDatabase(database) {
         await tx.run('UPDATE memberships SET permissions = ?, updated_at = ? WHERE id = ?', [JSON.stringify(merged), now(), manager.id]);
       }
       await tx.run('INSERT INTO control_migration_versions (version, applied_at) VALUES (?, ?)', ['phase7-operations-rbac-001', now()]);
+    }
+    const complianceRbac = await tx.one('SELECT version FROM control_migration_versions WHERE version = ?', ['phase8-compliance-rbac-002']);
+    if (!complianceRbac) {
+      const managers = await tx.all(`SELECT id, permissions FROM memberships WHERE role = 'manager'`);
+      for (const manager of managers) {
+        let permissions;
+        try { permissions = typeof manager.permissions === 'string' ? JSON.parse(manager.permissions) : manager.permissions; } catch { permissions = []; }
+        const merged = [...new Set([...(Array.isArray(permissions) ? permissions : []), 'subscriptions.*', 'compliance.read', 'compliance.prepare', 'compliance.file'])];
+        await tx.run('UPDATE memberships SET permissions = ?, updated_at = ? WHERE id = ?', [JSON.stringify(merged), now(), manager.id]);
+      }
+      await tx.run('INSERT INTO control_migration_versions (version, applied_at) VALUES (?, ?)', ['phase8-compliance-rbac-002', now()]);
     }
   });
 }
@@ -646,6 +668,68 @@ function tenantSchema(dialect) {
       created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
       CHECK (channel IN ('IN_APP', 'EMAIL', 'SMS', 'WHATSAPP')),
       CHECK (status IN ('SCHEDULED', 'PROCESSING', 'SENT', 'FAILED', 'CANCELLED'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS subscriptions (
+      id ${id}, subscription_no TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+      customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+      warehouse_id INTEGER NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,
+      status TEXT NOT NULL DEFAULT 'DRAFT', frequency TEXT NOT NULL,
+      interval_count INTEGER NOT NULL DEFAULT 1, start_date TEXT NOT NULL, end_date TEXT,
+      next_run_at TEXT, last_run_at TEXT, due_days INTEGER NOT NULL DEFAULT 0,
+      price_policy TEXT NOT NULL DEFAULT 'SNAPSHOT', currency TEXT NOT NULL DEFAULT 'INR',
+      items_snapshot ${json} NOT NULL, invoice_details ${json}, delivery_channels ${json},
+      notes TEXT, created_by TEXT NOT NULL, activated_by TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (status IN ('DRAFT', 'ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED')),
+      CHECK (frequency IN ('DAILY', 'WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY')),
+      CHECK (interval_count > 0 AND due_days >= 0),
+      CHECK (price_policy IN ('SNAPSHOT', 'CURRENT_APPROVED'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS subscription_runs (
+      id ${id}, subscription_id INTEGER NOT NULL REFERENCES subscriptions(id) ON DELETE RESTRICT,
+      occurrence_key TEXT NOT NULL, scheduled_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'PENDING',
+      invoice_id INTEGER REFERENCES invoices(id) ON DELETE RESTRICT, sale_id INTEGER REFERENCES sales(id),
+      attempts INTEGER NOT NULL DEFAULT 0, error_code TEXT, error_message TEXT,
+      started_at TEXT, completed_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (status IN ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'SKIPPED')),
+      UNIQUE (subscription_id, occurrence_key)
+    )`,
+    `CREATE TABLE IF NOT EXISTS compliance_documents (
+      id ${id}, compliance_type TEXT NOT NULL, invoice_id INTEGER REFERENCES invoices(id) ON DELETE RESTRICT,
+      trade_document_id INTEGER REFERENCES trade_documents(id) ON DELETE RESTRICT,
+      status TEXT NOT NULL DEFAULT 'PREPARED', document_number TEXT,
+      provider TEXT, provider_reference TEXT, irn TEXT, acknowledgement_number TEXT,
+      acknowledgement_at TEXT, signed_qr TEXT, valid_until TEXT,
+      request_snapshot ${json} NOT NULL, response_snapshot ${json}, error_code TEXT, error_message TEXT,
+      generated_at TEXT, cancelled_at TEXT, cancellation_reason TEXT,
+      idempotency_key TEXT UNIQUE, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (compliance_type IN ('E_INVOICE', 'E_WAY_BILL')),
+      CHECK (status IN ('PREPARED', 'PENDING', 'GENERATED', 'FAILED', 'CANCELLED'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS gst_return_periods (
+      id ${id}, return_type TEXT NOT NULL, period TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'DRAFT', summary ${json} NOT NULL,
+      provider TEXT, provider_reference TEXT, error_code TEXT, error_message TEXT,
+      prepared_by TEXT, prepared_at TEXT, approval_requested_by TEXT, approval_requested_at TEXT,
+      approved_by TEXT, approved_at TEXT, filed_by TEXT, filed_at TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (return_type IN ('GSTR_1', 'GSTR_2B', 'GSTR_3B', 'GSTR_7', 'IMS')),
+      CHECK (status IN ('DRAFT', 'PREPARED', 'PENDING_APPROVAL', 'APPROVED', 'FILED', 'FAILED')),
+      UNIQUE (return_type, period)
+    )`,
+    `CREATE TABLE IF NOT EXISTS gst_reconciliation_rows (
+      id ${id}, return_id INTEGER NOT NULL REFERENCES gst_return_periods(id) ON DELETE RESTRICT,
+      source_type TEXT NOT NULL, source_id TEXT, counterparty_gstin TEXT,
+      document_number TEXT, document_date TEXT, taxable_minor INTEGER NOT NULL DEFAULT 0,
+      tax_minor INTEGER NOT NULL DEFAULT 0, match_status TEXT NOT NULL DEFAULT 'UNMATCHED',
+      ims_action TEXT, metadata ${json}, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (match_status IN ('MATCHED', 'MISMATCH', 'UNMATCHED', 'MISSING_BOOKS', 'MISSING_PORTAL')),
+      CHECK (ims_action IS NULL OR ims_action IN ('ACCEPT', 'REJECT', 'PENDING'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS compliance_events (
+      id ${id}, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, event_type TEXT NOT NULL,
+      actor_user_id TEXT, request_id TEXT, sanitized_payload ${json}, error_message TEXT,
+      created_at TEXT NOT NULL
     )`,
     `CREATE TABLE IF NOT EXISTS product_commerce (
       product_id INTEGER PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
@@ -1093,6 +1177,12 @@ function tenantSchema(dialect) {
     `CREATE INDEX IF NOT EXISTS idx_project_entries_project ON project_entries(project_id, occurred_at)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_project_entries_source ON project_entries(project_id, entry_type, source_type, source_id)`,
     `CREATE INDEX IF NOT EXISTS idx_project_documents_project ON project_documents(project_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_subscriptions_due ON subscriptions(status, next_run_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_subscription_runs_schedule ON subscription_runs(status, scheduled_at)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_compliance_document_source ON compliance_documents(compliance_type, invoice_id) WHERE invoice_id IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_compliance_documents_status ON compliance_documents(compliance_type, status, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_gst_returns_period ON gst_return_periods(return_type, period, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_gst_reconciliation_return ON gst_reconciliation_rows(return_id, match_status)`,
     `CREATE INDEX IF NOT EXISTS idx_refunds_invoice ON refunds(invoice_id, created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_document_jobs_status ON document_generation_jobs(status, available_at)`,
     `CREATE INDEX IF NOT EXISTS idx_document_links_source ON document_links(source_entity_type, source_entity_id)`,
@@ -1289,6 +1379,24 @@ async function seedFinanceOperationsDefaults(tx) {
     );
   }
   await backfillFinanceJournals(tx);
+}
+
+async function seedSubscriptionsComplianceDefaults(tx) {
+  for (const key of ['subscriptions_v2', 'compliance_v2']) {
+    await tx.run(
+      `INSERT INTO feature_flags (flag_key, enabled, configuration, updated_at)
+       VALUES (?, 0, ?, ?)
+       ON CONFLICT (flag_key) DO NOTHING`,
+      [key, JSON.stringify({}), now()]
+    );
+  }
+  for (const [key, prefix] of [['subscription', 'SUB'], ['compliance_einvoice', 'EINV'], ['compliance_eway', 'EWB']]) {
+    await tx.run(
+      `INSERT INTO number_sequences (sequence_key, prefix, next_value, padding, updated_at)
+       VALUES (?, ?, 1, 6, ?) ON CONFLICT (sequence_key) DO NOTHING`,
+      [key, prefix, now()]
+    );
+  }
 }
 
 async function backfillFinanceJournals(tx) {
@@ -1738,7 +1846,7 @@ async function withSqliteLock(key, work) {
 function rolePermissions(role) {
   const map = {
     admin: ['*'],
-    manager: ['dashboard.read', 'products.*', 'inventory.*', 'trade.*', 'parties.*', 'payments.*', 'approvals.*', 'ai.*', 'barcode.*', 'finance.*', 'projects.*', 'reminders.*', 'reports.read'],
+    manager: ['dashboard.read', 'products.*', 'inventory.*', 'trade.*', 'parties.*', 'payments.*', 'approvals.*', 'ai.*', 'barcode.*', 'finance.*', 'projects.*', 'reminders.*', 'subscriptions.*', 'compliance.read', 'compliance.prepare', 'compliance.file', 'reports.read'],
     cashier: [
       'dashboard.read', 'products.read', 'inventory.read', 'trade.sales.*',
       'parties.customers.*', 'payments.create', 'ai.read',

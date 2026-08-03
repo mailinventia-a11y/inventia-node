@@ -6,6 +6,7 @@ import { hashPlatformPassword } from '../platform/phase5Auth.js';
 import { attemptInvoicePdf } from '../services/invoicePaymentService.js';
 import { processBarcodePrintJob } from '../services/barcodeLabelService.js';
 import { processReminderDelivery } from '../services/businessOperationsService.js';
+import { processDueSubscriptions } from '../services/subscriptionComplianceService.js';
 
 if (!process.env.REDIS_URL) {
   throw new Error('REDIS_URL is required to run the Phase 5 worker.');
@@ -54,6 +55,10 @@ const worker = new Worker('inventia-domain-jobs', async job => {
     case 'reminder.deliver': {
       const db = await getTenantDatabase(job.data.organization_id);
       return processReminderDelivery(db, job.data.reminder_id, job.data.organization_id);
+    }
+    case 'subscription.invoice.generate': {
+      const db = await getTenantDatabase(job.data.organization_id);
+      return { results: await processDueSubscriptions(db, job.data.organization_id, 200) };
     }
     default:
       throw new Error(`Unsupported domain job '${job.name}'.`);
