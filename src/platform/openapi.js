@@ -2,8 +2,8 @@ export const phase5OpenApi = {
   openapi: '3.1.0',
   info: {
     title: 'Inventia Enterprise Core Trade API',
-    version: '8.0.0',
-    description: 'Tenant-isolated trade, recurring invoices, GST compliance, payments, accounting, projects, inventory, barcodes, settings, and feature-flag APIs.'
+    version: '9.0.0',
+    description: 'Tenant-isolated trade, online catalogue and orders, encrypted integrations, webhooks, recurring invoices, GST compliance, payments, accounting, projects, inventory, barcodes, settings, and feature-flag APIs.'
   },
   servers: [{ url: '/api/v1' }],
   components: {
@@ -209,6 +209,34 @@ export const phase5OpenApi = {
     '/compliance/return-periods/{id}/approve': { post: { summary: 'Authorize a return for filing', responses: { 200: { description: 'Approved' } } } },
     '/compliance/return-periods/{id}/file': { post: { summary: 'File an approved return through a configured provider', responses: { 200: { description: 'Provider-confirmed filing' }, 503: { description: 'Integration not configured' } } } },
     '/compliance/tds-tcs': { get: { summary: 'TDS/TCS exposure report from posted tenant records', responses: { 200: { description: 'TDS/TCS report' } } } },
+    '/public/store/{organizationSlug}/catalog': { get: { summary: 'Read a tenant-safe published catalogue', security: [], responses: { 200: { description: 'Published catalogue' }, 404: { description: 'Store is not published' } } } },
+    '/public/store/{organizationSlug}/orders': { post: { summary: 'Submit an idempotent online order for review without reserving stock', security: [], responses: { 201: { description: 'Order queued for review' }, 409: { description: 'Store is catalogue-only' } } } },
+    '/store/settings': {
+      get: { summary: 'Read online store publication settings', responses: { 200: { description: 'Store settings' } } },
+      put: { summary: 'Configure catalogue mode, stock policy, and publication status', responses: { 200: { description: 'Store settings updated' } } }
+    },
+    '/store/catalog': { get: { summary: 'List products and catalogue publication state', responses: { 200: { description: 'Catalogue management records' } } } },
+    '/store/catalog/{productId}': { put: { summary: 'Publish or unpublish an authoritative product snapshot', responses: { 200: { description: 'Catalogue product updated' } } } },
+    '/store/orders': { get: { summary: 'List reviewable online orders', responses: { 200: { description: 'Online orders' } } } },
+    '/store/orders/{id}/accept': { post: { summary: 'Accept a pending online order without client-side stock mutation', responses: { 200: { description: 'Order accepted' }, 409: { description: 'Already reviewed' } } } },
+    '/store/orders/{id}/reject': { post: { summary: 'Reject a pending online order with audit evidence', responses: { 200: { description: 'Order rejected' } } } },
+    '/integrations': { get: { summary: 'List tenant provider configuration and health without secrets', responses: { 200: { description: 'Integration registry' } } } },
+    '/integrations/{provider}': {
+      get: { summary: 'Read safe integration metadata', responses: { 200: { description: 'Integration metadata' } } },
+      put: { summary: 'Encrypt and save provider credentials', responses: { 200: { description: 'Integration configured' }, 409: { description: 'Provider deferred' } } },
+      delete: { summary: 'Disable an integration without deleting audit history', responses: { 200: { description: 'Integration disabled' } } }
+    },
+    '/integrations/{provider}/test': { post: { summary: 'Run a real provider health request; never simulate success', responses: { 200: { description: 'Provider-confirmed health' }, 503: { description: 'Integration not configured' } } } },
+    '/integrations/{provider}/sync': { post: { summary: 'Run an idempotent provider sync with sanitized audit history', responses: { 200: { description: 'Provider-confirmed sync' }, 502: { description: 'Sync failed and remains retryable' } } } },
+    '/integrations/api-keys': {
+      get: { summary: 'List tenant API-key prefixes and scopes without hashes or secrets', responses: { 200: { description: 'API keys' } } },
+      post: { summary: 'Issue a scoped API secret shown once', responses: { 201: { description: 'API key issued' } } }
+    },
+    '/webhook-subscriptions': {
+      get: { summary: 'List signed outgoing webhook subscriptions', responses: { 200: { description: 'Webhook subscriptions' } } },
+      post: { summary: 'Create an encrypted signing secret shown once', responses: { 201: { description: 'Webhook subscription created' } } }
+    },
+    '/webhook-deliveries': { get: { summary: 'List sanitized webhook delivery history', responses: { 200: { description: 'Webhook deliveries' } } } },
     '/finance/accounts': {
       get: { summary: 'List tenant chart of accounts with minor-unit balances', responses: { 200: { description: 'Accounts' } } },
       post: { summary: 'Create a chart-of-accounts record', responses: { 201: { description: 'Account created' } } }

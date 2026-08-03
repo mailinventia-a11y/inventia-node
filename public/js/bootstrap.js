@@ -7,6 +7,7 @@ import { createStateStore } from './core/state.js';
 import { installMilestone1 } from './milestone1.js';
 import { installMilestone3 } from './milestone3.js';
 import { installMilestone4 } from './milestone4.js';
+import { installMilestone5 } from './milestone5.js';
 
 const store = createStateStore({
   ready: false,
@@ -22,6 +23,7 @@ const realtime = new OrganizationRealtimeClient();
 installMilestone1({ router, api, store });
 installMilestone3({ router, api, store });
 installMilestone4({ router, api, store });
+installMilestone5({ router, api, store });
 
 async function initializeAuthenticated() {
   const authenticated = Boolean(localStorage.getItem('phase5AccessToken'));

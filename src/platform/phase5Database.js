@@ -187,6 +187,17 @@ export async function migrateTenantDatabase(database) {
         ['phase8-subscriptions-compliance-005', now()]
       );
     }
+    const storeIntegrationsApplied = await tx.one(
+      'SELECT version FROM migration_versions WHERE version = ?',
+      ['phase9-store-integrations-006']
+    );
+    if (!storeIntegrationsApplied) {
+      await seedStoreIntegrationDefaults(tx);
+      await tx.run(
+        'INSERT INTO migration_versions (version, applied_at) VALUES (?, ?)',
+        ['phase9-store-integrations-006', now()]
+      );
+    }
   });
 }
 
@@ -401,6 +412,17 @@ async function migrateControlDatabase(database) {
         await tx.run('UPDATE memberships SET permissions = ?, updated_at = ? WHERE id = ?', [JSON.stringify(merged), now(), manager.id]);
       }
       await tx.run('INSERT INTO control_migration_versions (version, applied_at) VALUES (?, ?)', ['phase8-compliance-rbac-002', now()]);
+    }
+    const storeIntegrationRbac = await tx.one('SELECT version FROM control_migration_versions WHERE version = ?', ['phase9-store-integrations-rbac-003']);
+    if (!storeIntegrationRbac) {
+      const managers = await tx.all(`SELECT id, permissions FROM memberships WHERE role = 'manager'`);
+      for (const manager of managers) {
+        let permissions;
+        try { permissions = typeof manager.permissions === 'string' ? JSON.parse(manager.permissions) : manager.permissions; } catch { permissions = []; }
+        const merged = [...new Set([...(Array.isArray(permissions) ? permissions : []), 'store.read', 'store.manage', 'integrations.read', 'integrations.manage'])];
+        await tx.run('UPDATE memberships SET permissions = ?, updated_at = ? WHERE id = ?', [JSON.stringify(merged), now(), manager.id]);
+      }
+      await tx.run('INSERT INTO control_migration_versions (version, applied_at) VALUES (?, ?)', ['phase9-store-integrations-rbac-003', now()]);
     }
   });
 }
@@ -939,6 +961,91 @@ function tenantSchema(dialect) {
       provider TEXT PRIMARY KEY, encrypted_config TEXT NOT NULL,
       status TEXT DEFAULT 'active', updated_by TEXT, updated_at TEXT NOT NULL
     )`,
+    `CREATE TABLE IF NOT EXISTS store_settings (
+      id INTEGER PRIMARY KEY, store_slug TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'DRAFT', mode TEXT NOT NULL DEFAULT 'CATALOG_ONLY',
+      stock_policy TEXT NOT NULL DEFAULT 'HIDE_QUANTITY', contact_details ${json} NOT NULL,
+      terms TEXT, updated_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (id = 1), CHECK (status IN ('DRAFT', 'PUBLISHED', 'PAUSED')),
+      CHECK (mode IN ('CATALOG_ONLY', 'DIRECT_ORDER')),
+      CHECK (stock_policy IN ('HIDE_QUANTITY', 'SHOW_AVAILABLE', 'IN_STOCK_ONLY'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS store_catalog_products (
+      id ${id}, product_id INTEGER NOT NULL UNIQUE REFERENCES products(id) ON DELETE RESTRICT,
+      published INTEGER NOT NULL DEFAULT 0, price_minor INTEGER,
+      show_stock INTEGER NOT NULL DEFAULT 0, max_order_quantity REAL,
+      sort_order INTEGER NOT NULL DEFAULT 0, metadata ${json} NOT NULL,
+      published_at TEXT, updated_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (published IN (0, 1)), CHECK (show_stock IN (0, 1)),
+      CHECK (price_minor IS NULL OR price_minor >= 0),
+      CHECK (max_order_quantity IS NULL OR max_order_quantity > 0)
+    )`,
+    `CREATE TABLE IF NOT EXISTS online_orders (
+      id ${id}, order_number TEXT NOT NULL UNIQUE, public_order_id TEXT NOT NULL UNIQUE,
+      customer_snapshot ${json} NOT NULL, status TEXT NOT NULL DEFAULT 'PENDING_REVIEW',
+      currency TEXT NOT NULL DEFAULT 'INR', subtotal_minor INTEGER NOT NULL,
+      tax_minor INTEGER NOT NULL DEFAULT 0, grand_total_minor INTEGER NOT NULL,
+      source TEXT NOT NULL DEFAULT 'PUBLIC_CATALOG', external_order_id TEXT,
+      payment_provider TEXT, payment_reference TEXT, payment_verified INTEGER NOT NULL DEFAULT 0,
+      trade_document_id INTEGER REFERENCES trade_documents(id), rejection_reason TEXT,
+      idempotency_key TEXT, reviewed_by TEXT, reviewed_at TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (status IN ('PENDING_REVIEW', 'ACCEPTED', 'REJECTED', 'CANCELLED', 'CONVERTED')),
+      CHECK (subtotal_minor >= 0 AND tax_minor >= 0 AND grand_total_minor >= 0),
+      CHECK (payment_verified IN (0, 1)),
+      UNIQUE (source, external_order_id), UNIQUE (idempotency_key)
+    )`,
+    `CREATE TABLE IF NOT EXISTS online_order_items (
+      id ${id}, online_order_id INTEGER NOT NULL REFERENCES online_orders(id) ON DELETE RESTRICT,
+      product_id INTEGER NOT NULL REFERENCES products(id), quantity REAL NOT NULL,
+      unit_price_minor INTEGER NOT NULL, tax_rate REAL NOT NULL DEFAULT 0,
+      taxable_minor INTEGER NOT NULL, tax_minor INTEGER NOT NULL, line_total_minor INTEGER NOT NULL,
+      product_snapshot ${json} NOT NULL,
+      CHECK (quantity > 0), CHECK (unit_price_minor >= 0),
+      CHECK (taxable_minor >= 0 AND tax_minor >= 0 AND line_total_minor >= 0)
+    )`,
+    `CREATE TABLE IF NOT EXISTS integration_providers (
+      provider TEXT PRIMARY KEY, display_name TEXT NOT NULL, category TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'UNCONFIGURED',
+      capabilities ${json} NOT NULL, last_health_status TEXT, last_health_at TEXT,
+      last_error TEXT, updated_by TEXT, updated_at TEXT NOT NULL,
+      CHECK (enabled IN (0, 1)),
+      CHECK (status IN ('UNCONFIGURED', 'READY', 'ERROR', 'DISABLED'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS integration_sync_runs (
+      id ${id}, provider TEXT NOT NULL REFERENCES integration_providers(provider),
+      sync_type TEXT NOT NULL, status TEXT NOT NULL, checkpoint ${json},
+      sanitized_request ${json}, sanitized_response ${json}, records_processed INTEGER NOT NULL DEFAULT 0,
+      error_code TEXT, error_message TEXT, idempotency_key TEXT NOT NULL UNIQUE,
+      requested_by TEXT, started_at TEXT NOT NULL, completed_at TEXT,
+      CHECK (status IN ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS tenant_api_keys (
+      id ${id}, name TEXT NOT NULL, key_prefix TEXT NOT NULL UNIQUE, secret_hash TEXT NOT NULL UNIQUE,
+      scopes ${json} NOT NULL, status TEXT NOT NULL DEFAULT 'ACTIVE',
+      expires_at TEXT, last_used_at TEXT, created_by TEXT, created_at TEXT NOT NULL, revoked_at TEXT,
+      CHECK (status IN ('ACTIVE', 'REVOKED'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+      id ${id}, name TEXT NOT NULL, endpoint_url TEXT NOT NULL,
+      encrypted_secret TEXT NOT NULL, events ${json} NOT NULL,
+      status TEXT NOT NULL DEFAULT 'ACTIVE', created_by TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      CHECK (status IN ('ACTIVE', 'PAUSED', 'REVOKED'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS webhook_deliveries (
+      id ${id}, subscription_id INTEGER NOT NULL REFERENCES webhook_subscriptions(id) ON DELETE RESTRICT,
+      event_id TEXT NOT NULL, event_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'PENDING',
+      attempt_count INTEGER NOT NULL DEFAULT 0, sanitized_payload ${json} NOT NULL,
+      response_status INTEGER, sanitized_response TEXT, error_message TEXT,
+      next_attempt_at TEXT, created_at TEXT NOT NULL, delivered_at TEXT,
+      UNIQUE (subscription_id, event_id),
+      CHECK (status IN ('PENDING', 'DELIVERED', 'FAILED', 'CANCELLED'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_store_catalog_published ON store_catalog_products(published, sort_order)`,
+    `CREATE INDEX IF NOT EXISTS idx_online_orders_status_created ON online_orders(status, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_integration_sync_provider_status ON integration_sync_runs(provider, status, started_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_status_retry ON webhook_deliveries(status, next_attempt_at)`,
     `CREATE TABLE IF NOT EXISTS payment_gateway_transactions (
       id ${id}, provider TEXT NOT NULL, provider_order_id TEXT,
       provider_payment_id TEXT, provider_refund_id TEXT, direction TEXT DEFAULT 'payment',
@@ -1399,6 +1506,46 @@ async function seedSubscriptionsComplianceDefaults(tx) {
   }
 }
 
+async function seedStoreIntegrationDefaults(tx) {
+  const timestamp = now();
+  for (const key of ['online_store_v2', 'integrations_v2']) {
+    await tx.run(
+      `INSERT INTO feature_flags (flag_key, enabled, configuration, updated_at)
+       VALUES (?, 0, ?, ?) ON CONFLICT (flag_key) DO NOTHING`,
+      [key, JSON.stringify({}), timestamp]
+    );
+  }
+  await tx.run(
+    `INSERT INTO store_settings
+      (id, store_slug, status, mode, stock_policy, contact_details, terms, created_at, updated_at)
+     VALUES (1, 'catalog', 'DRAFT', 'CATALOG_ONLY', 'HIDE_QUANTITY', ?, '', ?, ?)
+     ON CONFLICT (id) DO NOTHING`,
+    [JSON.stringify({}), timestamp, timestamp]
+  );
+  const providers = [
+    ['razorpay', 'Razorpay', 'payments', ['orders', 'payments', 'refunds']],
+    ['email', 'Email', 'communications', ['messages']],
+    ['whatsapp', 'WhatsApp', 'communications', ['templates', 'messages']],
+    ['tally', 'Tally', 'accounting', ['export', 'sync']],
+    ['shopify', 'Shopify', 'commerce', ['orders', 'products']],
+    ['shiprocket', 'Shiprocket', 'shipping', ['shipments', 'tracking']]
+  ];
+  for (const [provider, name, category, capabilities] of providers) {
+    await tx.run(
+      `INSERT INTO integration_providers
+        (provider, display_name, category, enabled, status, capabilities, updated_at)
+       VALUES (?, ?, ?, 0, 'UNCONFIGURED', ?, ?)
+       ON CONFLICT (provider) DO NOTHING`,
+      [provider, name, category, JSON.stringify(capabilities), timestamp]
+    );
+  }
+  await tx.run(
+    `INSERT INTO number_sequences (sequence_key, prefix, next_value, padding, updated_at)
+     VALUES ('online_order', 'WEB', 1, 6, ?) ON CONFLICT (sequence_key) DO NOTHING`,
+    [timestamp]
+  );
+}
+
 async function backfillFinanceJournals(tx) {
   const accountRows = await tx.all(`SELECT id, code FROM accounts WHERE code IN ('1000','1100','1200','2000','2100','4000','5000')`);
   const accounts = Object.fromEntries(accountRows.map(row => [row.code, row.id]));
@@ -1846,7 +1993,7 @@ async function withSqliteLock(key, work) {
 function rolePermissions(role) {
   const map = {
     admin: ['*'],
-    manager: ['dashboard.read', 'products.*', 'inventory.*', 'trade.*', 'parties.*', 'payments.*', 'approvals.*', 'ai.*', 'barcode.*', 'finance.*', 'projects.*', 'reminders.*', 'subscriptions.*', 'compliance.read', 'compliance.prepare', 'compliance.file', 'reports.read'],
+    manager: ['dashboard.read', 'products.*', 'inventory.*', 'trade.*', 'parties.*', 'payments.*', 'approvals.*', 'ai.*', 'barcode.*', 'finance.*', 'projects.*', 'reminders.*', 'subscriptions.*', 'compliance.read', 'compliance.prepare', 'compliance.file', 'store.read', 'store.manage', 'integrations.read', 'integrations.manage', 'reports.read'],
     cashier: [
       'dashboard.read', 'products.read', 'inventory.read', 'trade.sales.*',
       'parties.customers.*', 'payments.create', 'ai.read',

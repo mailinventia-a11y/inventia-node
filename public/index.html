@@ -151,6 +151,8 @@
       </div>
       <button class="nav-btn" data-tab="reports" data-module="insights" data-view="analytics" data-permission="reports.read"><i class="fa-solid fa-chart-simple"></i> Analytics</button>
       <button class="nav-btn" data-tab="automation" data-module="ai" data-view="copilot" data-permission="ai.read"><i class="fa-solid fa-wand-magic-sparkles"></i> Inventia AI <span class="nav-badge new">AI</span></button>
+      <button class="nav-btn" data-tab="milestone5-workspace" data-module="store" data-view="overview" data-permission="store.read" data-feature="online_store_v2"><i class="fa-solid fa-store"></i> Online Store</button>
+      <button class="nav-btn" data-tab="milestone5-workspace" data-module="integrations" data-view="overview" data-permission="integrations.read" data-feature="integrations_v2"><i class="fa-solid fa-plug"></i> Integrations</button>
       <button class="nav-btn" data-tab="settings-tab" data-module="settings" data-view="organization" data-permission="settings.manage"><i class="fa-solid fa-gear"></i> Settings</button>
       <button class="nav-btn logout-btn" onclick="logout()">
         <i class="fa-solid fa-right-from-bracket"></i> Logout
@@ -2176,18 +2178,22 @@
       </div>
     </section>
 
-    <!-- WORKSPACE: Marketplace -->
-    <section id="marketplace" class="tab-panel workspace-page">
+    <!-- MILESTONE 5: online store and integrations -->
+    <section id="milestone5-workspace" class="tab-panel workspace-page">
       <div class="workspace-page-hero">
-        <div class="workspace-page-icon rose"><i class="fa-solid fa-store"></i></div>
-        <div><p class="eyebrow">Connected workspace</p><h2>Marketplace</h2><p>Extend Inventia with payment, storefront, accounting, and communication integrations.</p></div>
-        <button class="action-btn primary" onclick="openSettingsSection('integrations')"><i class="fa-solid fa-plug"></i> Browse integrations</button>
+        <div class="workspace-page-icon violet" id="m5WorkspaceIcon"><i class="fa-solid fa-store"></i></div>
+        <div><p class="eyebrow">Commerce &amp; connected operations</p><h2 id="m5WorkspaceTitle">Workspace</h2><p id="m5WorkspaceDescription">Publish a controlled catalogue and manage audited integrations.</p></div>
+        <div class="panel-actions" id="m5WorkspaceActions"></div>
       </div>
-      <div class="workspace-feature-grid four-col">
-        <button class="workspace-feature-card" onclick="openSettingsSection('integrations')"><i class="fa-brands fa-whatsapp"></i><strong>WhatsApp</strong><span>Customer notifications and updates.</span></button>
-        <button class="workspace-feature-card" onclick="openSettingsSection('integrations')"><i class="fa-solid fa-credit-card"></i><strong>Payments</strong><span>Razorpay and PhonePe connections.</span></button>
-        <button class="workspace-feature-card" onclick="openSettingsSection('integrations')"><i class="fa-solid fa-cart-plus"></i><strong>Commerce</strong><span>Shopify and WooCommerce storefronts.</span></button>
-        <button class="workspace-feature-card" onclick="openSettingsSection('integrations')"><i class="fa-solid fa-code"></i><strong>Developer API</strong><span>Keys, webhooks, and custom flows.</span></button>
+      <div class="kpi-grid" id="m5WorkspaceKpis" hidden></div>
+      <div class="grid-panel">
+        <div class="panel-title-row">
+          <div><h3 id="m5PanelTitle">Records</h3><p>Tenant-scoped, retry-safe, and free of simulated provider success.</p></div>
+          <button class="action-btn secondary compact" id="m5Refresh" type="button"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+        <div id="m5WorkspaceForm" class="workspace-detail-section" hidden></div>
+        <div id="m5WorkspaceState" class="workspace-inline-state" role="status">Loading…</div>
+        <div class="table-container" id="m5WorkspaceTable"></div>
       </div>
     </section>
 

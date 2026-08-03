@@ -127,6 +127,8 @@ export const FEATURE_FLAG_DEFAULTS = Object.freeze({
   projects_v2: { enabled: false, configuration: {} },
   subscriptions_v2: { enabled: false, configuration: {} },
   compliance_v2: { enabled: false, configuration: {} },
+  online_store_v2: { enabled: false, configuration: {} },
+  integrations_v2: { enabled: false, configuration: {} },
   notifications_v2: { enabled: false, configuration: {} }
 });
 

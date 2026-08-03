@@ -187,6 +187,32 @@ import {
   updateImsAction,
   updateSubscription
 } from '../services/subscriptionComplianceService.js';
+import {
+  configureIntegration,
+  createApiKey,
+  createPublicOrder,
+  createWebhookSubscription,
+  deliverWebhook,
+  disableIntegration,
+  getIntegration,
+  getOnlineOrder,
+  getPublicCatalog,
+  getStoreSettings,
+  listApiKeys,
+  listCatalogManagement,
+  listIntegrationRuns,
+  listIntegrations,
+  listOnlineOrders,
+  listWebhookDeliveries,
+  listWebhookSubscriptions,
+  reviewOnlineOrder,
+  revokeApiKey,
+  syncIntegration,
+  testIntegration,
+  updateCatalogProduct,
+  updateStoreSettings,
+  updateWebhookSubscription
+} from '../services/storeIntegrationService.js';
 
 const router = express.Router();
 const upload = multer({
@@ -536,6 +562,46 @@ const gstr2bImportSchema = z.object({
     taxable: z.coerce.number().nonnegative(), tax: z.coerce.number().nonnegative()
   })).max(10000)
 });
+const storeSettingsSchema = z.object({
+  store_slug: z.string().regex(/^[a-z0-9-]{2,80}$/),
+  status: z.enum(['DRAFT', 'PUBLISHED', 'PAUSED']),
+  mode: z.enum(['CATALOG_ONLY', 'DIRECT_ORDER']),
+  stock_policy: z.enum(['HIDE_QUANTITY', 'SHOW_AVAILABLE', 'IN_STOCK_ONLY']),
+  contact_details: z.record(z.string(), z.unknown()).default({}),
+  terms: z.string().max(20000).optional()
+});
+const catalogProductSchema = z.object({
+  published: z.boolean(), price: z.coerce.number().nonnegative().nullable().optional(),
+  show_stock: z.boolean().default(false), max_order_quantity: z.coerce.number().positive().nullable().optional(),
+  sort_order: z.coerce.number().int().min(0).max(100000).default(0),
+  metadata: z.record(z.string(), z.unknown()).default({})
+});
+const publicOrderSchema = z.object({
+  customer: z.object({
+    name: z.string().trim().min(2).max(300), phone: z.string().trim().min(5).max(50),
+    email: z.string().email().optional(), address: z.string().trim().min(5).max(2000),
+    gstin: z.string().trim().max(30).optional(), notes: z.string().max(2000).optional()
+  }),
+  items: z.array(z.object({ product_id: z.coerce.number().int().positive(), quantity: z.coerce.number().positive().max(100000) })).min(1).max(200),
+  payment: z.record(z.string(), z.unknown()).optional()
+});
+const integrationConfigSchema = z.object({
+  enabled: z.boolean().default(true), config: z.record(z.string(), z.unknown())
+});
+const integrationSyncSchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+});
+const apiKeySchema = z.object({
+  name: z.string().trim().min(2).max(200),
+  scopes: z.array(z.enum(['catalog.read', 'orders.read', 'orders.write', 'webhooks.read'])).min(1).max(20),
+  expires_at: z.string().datetime().optional()
+});
+const webhookSubscriptionSchema = z.object({
+  name: z.string().trim().min(2).max(200), endpoint_url: z.string().url().refine(value => value.startsWith('https://') || process.env.NODE_ENV !== 'production', 'HTTPS is required in production.'),
+  events: z.array(z.string().trim().min(1).max(100)).min(1).max(100), secret: z.string().min(16).max(500).optional()
+});
+const webhookUpdateSchema = webhookSubscriptionSchema.omit({ secret: true }).extend({ status: z.enum(['ACTIVE', 'PAUSED', 'REVOKED']) });
 
 router.post('/auth/login', validate(loginSchema), asyncRoute(async (req, res) => {
   const result = await loginPlatform({
@@ -563,6 +629,27 @@ router.post('/auth/logout', validate(refreshSchema), asyncRoute(async (req, res)
 router.get('/payment-links/public/:organizationId/:token', asyncRoute(async (req, res) => {
   const tenantDb = await getTenantDatabase(req.params.organizationId);
   res.json(await resolvePublicPaymentLink(tenantDb, req.params.token));
+}));
+
+router.get('/public/store/:organizationSlug/catalog', asyncRoute(async (req, res) => {
+  const organization = await getControlDatabase().one(
+    `SELECT id, slug, name FROM organizations WHERE slug = ? AND status = 'active'`,
+    [req.params.organizationSlug]
+  );
+  if (!organization) throw httpError(404, 'store_not_found', 'The store was not found.');
+  res.json(await getPublicCatalog(await getTenantDatabase(organization.id), organization));
+}));
+
+router.post('/public/store/:organizationSlug/orders', validate(publicOrderSchema), asyncRoute(async (req, res) => {
+  const idempotencyKey = String(req.headers['idempotency-key'] || '').trim();
+  if (!idempotencyKey) throw httpError(400, 'idempotency_key_required', 'Idempotency-Key is required.');
+  const organization = await getControlDatabase().one(
+    `SELECT id, slug, name FROM organizations WHERE slug = ? AND status = 'active'`,
+    [req.params.organizationSlug]
+  );
+  if (!organization) throw httpError(404, 'store_not_found', 'The store was not found.');
+  const order = await createPublicOrder(await getTenantDatabase(organization.id), organization.id, req.body, idempotencyKey);
+  res.status(order.duplicate ? 200 : 201).json(order);
 }));
 
 router.use(authenticateV1);
@@ -1499,6 +1586,76 @@ router.post('/compliance/return-periods/:id/rows/:rowId/ims', requirePermission(
 router.get('/compliance/tds-tcs', requirePermission('compliance.read'), asyncRoute(async (req, res) => {
   res.json(await tdsTcsReport(req.tenantDb, req.query));
 }));
+
+router.get('/store/settings', requirePermission('store.read'), asyncRoute(async (req, res) => {
+  res.json(await getStoreSettings(req.tenantDb));
+}));
+router.put('/store/settings', requirePermission('store.manage'), validate(storeSettingsSchema), mutation(async req => ({
+  body: await updateStoreSettings(req.tenantDb, req.body, req)
+})));
+router.get('/store/catalog', requirePermission('store.read'), asyncRoute(async (req, res) => {
+  res.json({ products: await listCatalogManagement(req.tenantDb) });
+}));
+router.put('/store/catalog/:productId', requirePermission('store.manage'), validate(catalogProductSchema), mutation(async req => ({
+  body: await updateCatalogProduct(req.tenantDb, req.params.productId, req.body, req)
+})));
+router.get('/store/orders', requirePermission('store.read'), asyncRoute(async (req, res) => {
+  res.json({ orders: await listOnlineOrders(req.tenantDb, req.query) });
+}));
+router.get('/store/orders/:id', requirePermission('store.read'), asyncRoute(async (req, res) => {
+  res.json(await getOnlineOrder(req.tenantDb, req.params.id));
+}));
+for (const decision of ['accept', 'reject']) {
+  router.post(`/store/orders/:id/${decision}`, requirePermission('store.manage'), validate(z.object({
+    reason: z.string().trim().max(1000).optional()
+  })), mutation(async req => ({ body: await reviewOnlineOrder(req.tenantDb, req.params.id, decision, req.body, req) })));
+}
+
+router.get('/integrations/api-keys', requirePermission('integrations.read'), asyncRoute(async (req, res) => {
+  res.json({ api_keys: await listApiKeys(req.tenantDb) });
+}));
+router.post('/integrations/api-keys', requirePermission('integrations.manage'), validate(apiKeySchema), mutation(async req => ({
+  status: 201, body: await createApiKey(req.tenantDb, req.body, req)
+})));
+router.delete('/integrations/api-keys/:id', requirePermission('integrations.manage'), mutation(async req => ({
+  body: await revokeApiKey(req.tenantDb, req.params.id, req)
+})));
+router.get('/integrations', requirePermission('integrations.read'), asyncRoute(async (req, res) => {
+  res.json({ integrations: await listIntegrations(req.tenantDb) });
+}));
+router.get('/integrations/:provider/runs', requirePermission('integrations.read'), asyncRoute(async (req, res) => {
+  res.json({ runs: await listIntegrationRuns(req.tenantDb, req.params.provider) });
+}));
+router.get('/integrations/:provider', requirePermission('integrations.read'), asyncRoute(async (req, res) => {
+  res.json(await getIntegration(req.tenantDb, req.params.provider));
+}));
+router.put('/integrations/:provider', requirePermission('integrations.manage'), validate(integrationConfigSchema), mutation(async req => ({
+  body: await configureIntegration(req.tenantDb, req.params.provider, req.body, req)
+})));
+router.delete('/integrations/:provider', requirePermission('integrations.manage'), mutation(async req => ({
+  body: await disableIntegration(req.tenantDb, req.params.provider, req)
+})));
+router.post('/integrations/:provider/test', requirePermission('integrations.manage'), validate(z.object({})), mutation(async req => ({
+  body: await testIntegration(req.tenantDb, req.params.provider, req)
+})));
+router.post('/integrations/:provider/sync', requirePermission('integrations.manage'), validate(integrationSyncSchema), mutation(async req => ({
+  body: await syncIntegration(req.tenantDb, req.params.provider, req.body, req)
+})));
+router.get('/webhook-subscriptions', requirePermission('integrations.read'), asyncRoute(async (req, res) => {
+  res.json({ subscriptions: await listWebhookSubscriptions(req.tenantDb) });
+}));
+router.post('/webhook-subscriptions', requirePermission('integrations.manage'), validate(webhookSubscriptionSchema), mutation(async req => ({
+  status: 201, body: await createWebhookSubscription(req.tenantDb, req.body, req)
+})));
+router.put('/webhook-subscriptions/:id', requirePermission('integrations.manage'), validate(webhookUpdateSchema), mutation(async req => ({
+  body: await updateWebhookSubscription(req.tenantDb, req.params.id, req.body, req)
+})));
+router.get('/webhook-deliveries', requirePermission('integrations.read'), asyncRoute(async (req, res) => {
+  res.json({ deliveries: await listWebhookDeliveries(req.tenantDb, req.query) });
+}));
+router.post('/webhook-deliveries/:id/retry', requirePermission('integrations.manage'), validate(z.object({})), mutation(async req => ({
+  body: await deliverWebhook(req.tenantDb, req.params.id)
+})));
 
 router.get('/dashboard/summary', requirePermission('dashboard.read'), asyncRoute(async (req, res) => {
   res.json(await dashboardSummary(req.tenantDb, req.user.organization_id, req.query.refresh === 'true'));
